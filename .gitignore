@@ -1,0 +1,42 @@
+# Local agent artifacts
+.superpowers/
+
+# Local runtime data
+data/*.sqlite3
+data/*.sqlite3-wal
+data/*.sqlite3-shm
+data/*.sqlite3-journal
+data/dicom/
+data/.imports/
+data/.delete-staging/
+
+# Python environments, caches, and build outputs
+.venv/
+venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node.js, Vite, and test outputs
+node_modules/
+frontend/node_modules/
+frontend/dist/
+coverage/
+*.tsbuildinfo
+*.log
+
+# Local environment and editor files
+.env*
+!.env.example
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/

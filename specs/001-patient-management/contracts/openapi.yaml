@@ -1,0 +1,347 @@
+openapi: 3.1.0
+info:
+  title: Patient Management API
+  version: 0.1.0
+  description: >-
+    Local-only REST contract for the patient-management feature of an educational
+    medical CT application. This API is not for clinical diagnosis.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local FastAPI service
+security: []
+tags:
+  - name: Patients
+    description: Local patient CRUD and search
+paths:
+  /api/patients:
+    get:
+      tags: [Patients]
+      operationId: listPatients
+      summary: List or search patients
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: >-
+            Medical record number or patient name substring. Leading and trailing
+            whitespace is ignored; empty input returns the complete list.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Patients ordered by updated_at descending, then normalized medical record number ascending
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PatientRead"
+              examples:
+                onePatient:
+                  value:
+                    - id: "11111111-1111-4111-8111-111111111111"
+                      medical_record_no: "MR-0001"
+                      name: "演示病人"
+                      sex: unknown
+                      birth_date: null
+                      study_count: 0
+                      latest_study_date: null
+                      created_at: "2026-07-17T02:00:00Z"
+                      updated_at: "2026-07-17T02:00:00Z"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+    post:
+      tags: [Patients]
+      operationId: createPatient
+      summary: Create a patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientCreate"
+            examples:
+              basic:
+                value:
+                  medical_record_no: "MR-0001"
+                  name: "演示病人"
+                  sex: unknown
+                  birth_date: null
+      responses:
+        "201":
+          description: Patient created
+          headers:
+            Location:
+              description: Relative URL of the created patient resource
+              schema:
+                type: string
+                example: "/api/patients/11111111-1111-4111-8111-111111111111"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientRead"
+        "409":
+          $ref: "#/components/responses/MedicalRecordNumberConflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+  /api/patients/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PatientId"
+    get:
+      tags: [Patients]
+      operationId: getPatient
+      summary: Get patient details
+      responses:
+        "200":
+          description: Patient details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientRead"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+    patch:
+      tags: [Patients]
+      operationId: updatePatient
+      summary: Update one or more editable patient fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientPatch"
+            examples:
+              rename:
+                value:
+                  name: "演示病人（更新）"
+              clearBirthDate:
+                value:
+                  birth_date: null
+      responses:
+        "200":
+          description: Patient updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientRead"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "409":
+          $ref: "#/components/responses/MedicalRecordNumberConflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+    delete:
+      tags: [Patients]
+      operationId: deletePatient
+      summary: Permanently delete a patient
+      responses:
+        "204":
+          description: Patient permanently deleted; no response body
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+components:
+  parameters:
+    PatientId:
+      name: id
+      in: path
+      required: true
+      description: Internal patient UUID used only for API resource identity
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Sex:
+      type: string
+      enum: [male, female, other, unknown]
+      description: Frontend labels are 男、女、其他、未知
+    PatientCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - medical_record_no
+        - name
+      properties:
+        medical_record_no:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Display value after trimming outer whitespace; internal spaces and symbols are preserved
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        sex:
+          $ref: "#/components/schemas/Sex"
+        birth_date:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+          default: null
+    PatientPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        medical_record_no:
+          type: string
+          minLength: 1
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        sex:
+          $ref: "#/components/schemas/Sex"
+        birth_date:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+    PatientRead:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - medical_record_no
+        - name
+        - sex
+        - birth_date
+        - study_count
+        - latest_study_date
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Internal identifier returned for API operations; the UI must not display it
+        medical_record_no:
+          type: string
+        name:
+          type: string
+        sex:
+          $ref: "#/components/schemas/Sex"
+        birth_date:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+        study_count:
+          type: integer
+          const: 0
+          readOnly: true
+        latest_study_date:
+          type: "null"
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: RFC 3339 UTC timestamp ending in Z
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: RFC 3339 UTC timestamp ending in Z
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          enum: [medical_record_no, name, sex, birth_date, id, request]
+        code:
+          type: string
+        message:
+          type: string
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, field_errors]
+      properties:
+        code:
+          type: string
+          enum:
+            - validation_error
+            - medical_record_no_conflict
+            - patient_not_found
+            - persistence_error
+        message:
+          type: string
+        field_errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+  responses:
+    ValidationError:
+      description: Request or field validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: validation_error
+              message: "请求字段无效"
+              field_errors:
+                - field: birth_date
+                  code: date_in_future
+                  message: "出生日期不得晚于今天"
+    MedicalRecordNumberConflict:
+      description: The normalized medical record number already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: medical_record_no_conflict
+              message: "病历号已存在"
+              field_errors:
+                - field: medical_record_no
+                  code: not_unique
+                  message: "该病历号已被使用"
+    PatientNotFound:
+      description: Patient does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: patient_not_found
+              message: "未找到该病人"
+              field_errors: []
+    PersistenceError:
+      description: Local persistence failed; no internal SQL, path, or stack details are returned
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: persistence_error
+              message: "无法保存本次操作，请重试"
+              field_errors: []

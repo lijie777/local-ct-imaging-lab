@@ -1,0 +1,132 @@
+openapi: 3.1.0
+info:
+  title: Local Medical CT Instance File API
+  version: 0.3.0
+  description: >-
+    Local-only read contract for one managed DICOM instance in an educational
+    CT viewer. This API is not for clinical diagnosis.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local FastAPI service
+security: []
+tags:
+  - name: Instances
+    description: Read-only local managed DICOM instance resources
+paths:
+  /api/instances/{instance_id}/file:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [Instances]
+      operationId: getInstanceDicomFile
+      summary: Read one viewable managed DICOM instance
+      responses:
+        "200":
+          description: Managed DICOM Part 10 file; server paths are never exposed
+          headers:
+            Cache-Control:
+              description: Prevents reuse of stale local DICOM resource state
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/dicom:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/InstanceNotFound"
+        "409":
+          $ref: "#/components/responses/SeriesNotViewable"
+        "410":
+          $ref: "#/components/responses/DicomFileMissing"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+components:
+  parameters:
+    InstanceId:
+      name: instance_id
+      in: path
+      required: true
+      description: Internal instance UUID used only for API resource identity
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          enum: [instance_id, request]
+        code:
+          type: string
+        message:
+          type: string
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, field_errors]
+      properties:
+        code:
+          type: string
+          enum:
+            - validation_error
+            - instance_not_found
+            - series_not_viewable
+            - dicom_file_missing
+            - persistence_error
+        message:
+          type: string
+        field_errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+  responses:
+    ValidationError:
+      description: Instance resource identifier is invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InstanceNotFound:
+      description: Instance does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    SeriesNotViewable:
+      description: The instance belongs to a series that is not viewable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    DicomFileMissing:
+      description: The indexed managed DICOM file no longer exists
+      headers:
+        Cache-Control:
+          description: Prevents reuse of stale local DICOM resource state
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PersistenceError:
+      description: Local database or managed-path operation failed without exposing details
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

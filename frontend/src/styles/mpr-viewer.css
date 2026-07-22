@@ -1,0 +1,256 @@
+.mpr-viewer-page,
+.mpr-runtime-shell {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.mpr-viewer-heading,
+.mpr-entry {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.mpr-viewer-heading h1,
+.mpr-viewer-heading p,
+.mpr-entry p,
+.mpr-load-status p {
+  margin: 0;
+}
+
+.mpr-viewer-heading h1 {
+  color: #14213d;
+}
+
+.mpr-viewer-heading > div > p:last-child {
+  margin-top: 0.5rem;
+}
+
+.mpr-entry {
+  align-items: center;
+  padding: 1rem;
+  color: #24415f;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.8rem;
+}
+
+.mpr-entry--unavailable {
+  background: #f7f9fb;
+}
+
+.mpr-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  color: #24415f;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.65rem;
+}
+
+.mpr-toolbar__tools,
+.mpr-toolbar__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.mpr-toolbar__current {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mpr-toolbar .button[aria-pressed="true"] {
+  color: #fff;
+  background: #24415f;
+  border-color: #24415f;
+}
+
+.mpr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.85rem;
+  color: #f4f7fa;
+  background: #10151d;
+  border-radius: 0.8rem;
+  box-shadow: 0 0.5rem 1.5rem rgb(10 18 28 / 20%);
+}
+
+.mpr-viewport-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: #000;
+  border: 2px solid #394555;
+  border-radius: 0.55rem;
+}
+
+.mpr-viewport-card--active {
+  border-color: #8ab4e2;
+  box-shadow: 0 0 0 2px rgb(138 180 226 / 30%);
+}
+
+.mpr-viewport-canvas {
+  width: 100%;
+  height: 22rem;
+  min-height: 22rem;
+  background: #000;
+}
+
+.mpr-viewport-canvas:focus-visible {
+  outline: 3px solid #f2c75c;
+  outline-offset: -4px;
+}
+
+.mpr-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  text-shadow: 0 1px 3px #000;
+}
+
+.mpr-overlay__summary {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.75rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.mpr-overlay__position {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.65rem;
+  font-size: 0.82rem;
+}
+
+.mpr-overlay__orientation {
+  position: absolute;
+  font-weight: 800;
+}
+
+.mpr-overlay__orientation--top {
+  top: 0.55rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.mpr-overlay__orientation--right {
+  top: 50%;
+  right: 0.55rem;
+  transform: translateY(-50%);
+}
+
+.mpr-overlay__orientation--bottom {
+  bottom: 0.55rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.mpr-overlay__orientation--left {
+  top: 50%;
+  left: 0.55rem;
+  transform: translateY(-50%);
+}
+
+.mpr-metadata-panel {
+  min-width: 0;
+  padding: 1rem;
+  color: #dfe9f3;
+  background: #17212d;
+  border: 1px solid #394555;
+  border-radius: 0.55rem;
+}
+
+.mpr-metadata-panel h2,
+.mpr-metadata-panel p {
+  margin: 0;
+}
+
+.mpr-metadata-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.85rem 0 0;
+}
+
+.mpr-metadata-list > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.mpr-metadata-list dt {
+  color: #9fb2c5;
+}
+
+.mpr-metadata-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.mpr-metadata-panel p {
+  margin-top: 0.65rem;
+}
+
+.mpr-load-status {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  color: #24415f;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.65rem;
+}
+
+.mpr-viewer-page > .viewer-message,
+.mpr-runtime-shell > .viewer-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .mpr-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mpr-viewport-canvas {
+    height: 18rem;
+    min-height: 18rem;
+  }
+
+  .mpr-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mpr-toolbar__current {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 48rem) {
+  .mpr-viewer-heading,
+  .mpr-entry {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mpr-load-status {
+    flex-direction: column;
+  }
+
+  .mpr-viewer-page > .viewer-message .button,
+  .mpr-runtime-shell > .viewer-message .button {
+    width: 100%;
+  }
+}

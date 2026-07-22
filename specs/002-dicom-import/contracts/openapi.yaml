@@ -1,0 +1,674 @@
+openapi: 3.1.0
+info:
+  title: Local Medical CT Teaching API
+  version: 0.2.0
+  description: >-
+    Local-only REST contract for patient management and CT DICOM import in an
+    educational application. This API is not for clinical diagnosis.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local FastAPI service
+security: []
+tags:
+  - name: Patients
+    description: Local patient CRUD and search
+  - name: DICOM Import
+    description: Local CT DICOM import and per-file reporting
+  - name: Studies
+    description: Local Study, Series, and Instance metadata queries
+paths:
+  /api/patients:
+    get:
+      tags: [Patients]
+      operationId: listPatients
+      summary: List or search patients
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: >-
+            Medical record number or patient name substring. Leading and trailing
+            whitespace is ignored; empty input returns the complete list.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Patients ordered by updated time, then normalized medical record number
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PatientRead"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+    post:
+      tags: [Patients]
+      operationId: createPatient
+      summary: Create a patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientCreate"
+      responses:
+        "201":
+          description: Patient created
+          headers:
+            Location:
+              description: Relative URL of the created patient resource
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientRead"
+        "409":
+          $ref: "#/components/responses/MedicalRecordNumberConflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+  /api/patients/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PatientId"
+    get:
+      tags: [Patients]
+      operationId: getPatient
+      summary: Get patient details
+      responses:
+        "200":
+          description: Patient details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientRead"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+    patch:
+      tags: [Patients]
+      operationId: updatePatient
+      summary: Update one or more editable patient fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientPatch"
+      responses:
+        "200":
+          description: Patient updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientRead"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "409":
+          $ref: "#/components/responses/MedicalRecordNumberConflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+    delete:
+      tags: [Patients]
+      operationId: deletePatient
+      summary: Permanently delete a patient and managed DICOM data
+      responses:
+        "204":
+          description: Patient, DICOM indexes, and managed files deleted; no response body
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+  /api/patients/{patient_id}/dicom-import:
+    parameters:
+      - $ref: "#/components/parameters/PatientResourceId"
+    post:
+      tags: [DICOM Import]
+      operationId: importPatientDicom
+      summary: Import one or more local CT DICOM files for a patient
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "200":
+          description: Complete five-category report; success and partial success use the same response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportReport"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+  /api/patients/{patient_id}/studies:
+    parameters:
+      - $ref: "#/components/parameters/PatientResourceId"
+    get:
+      tags: [Studies]
+      operationId: listPatientStudies
+      summary: List studies imported for one patient
+      responses:
+        "200":
+          description: Deterministically ordered studies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudyRead"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+  /api/studies/{study_id}/series:
+    parameters:
+      - $ref: "#/components/parameters/StudyId"
+    get:
+      tags: [Studies]
+      operationId: listStudySeries
+      summary: List series within one study
+      responses:
+        "200":
+          description: Deterministically ordered series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SeriesRead"
+        "404":
+          $ref: "#/components/responses/StudyNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+  /api/series/{series_id}:
+    parameters:
+      - $ref: "#/components/parameters/SeriesId"
+    get:
+      tags: [Studies]
+      operationId: getSeriesDetails
+      summary: Get series metadata and ordered instance summaries
+      responses:
+        "200":
+          description: Series metadata and instance summaries without managed file paths
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeriesDetailRead"
+        "404":
+          $ref: "#/components/responses/SeriesNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/PersistenceError"
+components:
+  parameters:
+    PatientId:
+      name: id
+      in: path
+      required: true
+      description: Internal patient UUID used only for API resource identity
+      schema:
+        type: string
+        format: uuid
+    PatientResourceId:
+      name: patient_id
+      in: path
+      required: true
+      description: Internal patient UUID used only for API resource identity
+      schema:
+        type: string
+        format: uuid
+    StudyId:
+      name: study_id
+      in: path
+      required: true
+      description: Internal study UUID used only for API resource identity
+      schema:
+        type: string
+        format: uuid
+    SeriesId:
+      name: series_id
+      in: path
+      required: true
+      description: Internal series UUID used only for API resource identity
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Sex:
+      type: string
+      enum: [male, female, other, unknown]
+    PatientCreate:
+      type: object
+      additionalProperties: false
+      required: [medical_record_no, name]
+      properties:
+        medical_record_no:
+          type: string
+          minLength: 1
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        sex:
+          $ref: "#/components/schemas/Sex"
+        birth_date:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+          default: null
+    PatientPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        medical_record_no:
+          type: string
+          minLength: 1
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        sex:
+          $ref: "#/components/schemas/Sex"
+        birth_date:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+    PatientRead:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - medical_record_no
+        - name
+        - sex
+        - birth_date
+        - study_count
+        - latest_study_date
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Internal identifier; the UI must not display it
+        medical_record_no:
+          type: string
+        name:
+          type: string
+        sex:
+          $ref: "#/components/schemas/Sex"
+        birth_date:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+        study_count:
+          type: integer
+          minimum: 0
+          readOnly: true
+        latest_study_date:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    ImportCategory:
+      type: string
+      enum: [success, duplicate, skipped, unsupported, failed]
+    ImportItem:
+      type: object
+      additionalProperties: false
+      required: [file_name, category, code, message]
+      properties:
+        file_name:
+          type: string
+          description: Client-visible name or relative folder name, never an absolute server path
+        category:
+          $ref: "#/components/schemas/ImportCategory"
+        code:
+          type: string
+        message:
+          type: string
+        study_instance_uid:
+          oneOf:
+            - type: string
+            - type: "null"
+        series_instance_uid:
+          oneOf:
+            - type: string
+            - type: "null"
+        sop_instance_uid:
+          oneOf:
+            - type: string
+            - type: "null"
+    ImportReport:
+      type: object
+      additionalProperties: false
+      required: [total, success, duplicate, skipped, unsupported, failed, items]
+      properties:
+        total:
+          type: integer
+          minimum: 1
+        success:
+          type: integer
+          minimum: 0
+        duplicate:
+          type: integer
+          minimum: 0
+        skipped:
+          type: integer
+          minimum: 0
+        unsupported:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ImportItem"
+    ViewabilityStatus:
+      type: string
+      enum: [eligible, unsupported]
+    StudyRead:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - study_instance_uid
+        - dicom_patient_id
+        - study_date
+        - study_time
+        - accession_number
+        - description
+        - series_count
+        - instance_count
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        study_instance_uid:
+          type: string
+        dicom_patient_id:
+          type: string
+        study_date:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+        study_time:
+          oneOf:
+            - type: string
+              format: time
+            - type: "null"
+        accession_number:
+          oneOf:
+            - type: string
+            - type: "null"
+        description:
+          oneOf:
+            - type: string
+            - type: "null"
+        series_count:
+          type: integer
+          minimum: 0
+        instance_count:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    SeriesRead:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - series_instance_uid
+        - modality
+        - series_number
+        - description
+        - body_part_examined
+        - rows
+        - columns
+        - instance_count
+        - viewability_status
+        - viewability_reason
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        series_instance_uid:
+          type: string
+        modality:
+          type: string
+          const: CT
+        series_number:
+          oneOf:
+            - type: integer
+            - type: "null"
+        description:
+          oneOf:
+            - type: string
+            - type: "null"
+        body_part_examined:
+          oneOf:
+            - type: string
+            - type: "null"
+        rows:
+          oneOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+        columns:
+          oneOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+        instance_count:
+          type: integer
+          minimum: 0
+        viewability_status:
+          $ref: "#/components/schemas/ViewabilityStatus"
+        viewability_reason:
+          oneOf:
+            - type: string
+            - type: "null"
+    InstanceRead:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - sop_instance_uid
+        - sop_class_uid
+        - transfer_syntax_uid
+        - instance_number
+        - image_position_patient
+        - image_orientation_patient
+        - rows
+        - columns
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        sop_instance_uid:
+          type: string
+        sop_class_uid:
+          type: string
+        transfer_syntax_uid:
+          type: string
+        instance_number:
+          oneOf:
+            - type: integer
+            - type: "null"
+        image_position_patient:
+          oneOf:
+            - type: array
+              minItems: 3
+              maxItems: 3
+              items:
+                type: number
+            - type: "null"
+        image_orientation_patient:
+          oneOf:
+            - type: array
+              minItems: 6
+              maxItems: 6
+              items:
+                type: number
+            - type: "null"
+        rows:
+          oneOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+        columns:
+          oneOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+    SeriesDetailRead:
+      allOf:
+        - $ref: "#/components/schemas/SeriesRead"
+        - type: object
+          required: [instances]
+          properties:
+            instances:
+              type: array
+              items:
+                $ref: "#/components/schemas/InstanceRead"
+      unevaluatedProperties: false
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          enum:
+            - medical_record_no
+            - name
+            - sex
+            - birth_date
+            - id
+            - patient_id
+            - study_id
+            - series_id
+            - files
+            - request
+        code:
+          type: string
+        message:
+          type: string
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, field_errors]
+      properties:
+        code:
+          type: string
+          enum:
+            - validation_error
+            - medical_record_no_conflict
+            - patient_not_found
+            - study_not_found
+            - series_not_found
+            - persistence_error
+        message:
+          type: string
+        field_errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+  responses:
+    ValidationError:
+      description: Request or field validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    MedicalRecordNumberConflict:
+      description: The normalized medical record number already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PatientNotFound:
+      description: Patient does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    StudyNotFound:
+      description: Study does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    SeriesNotFound:
+      description: Series does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PersistenceError:
+      description: Local persistence or managed-file operation failed; internal details are not returned
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

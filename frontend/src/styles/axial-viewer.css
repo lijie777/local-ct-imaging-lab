@@ -1,0 +1,142 @@
+.axial-viewer-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.axial-viewer-heading {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.axial-viewer-heading h1,
+.axial-viewer-heading p {
+  margin: 0;
+}
+
+.axial-viewer-heading h1 {
+  color: #14213d;
+}
+
+.axial-viewer-heading > div > p:last-child {
+  margin-top: 0.5rem;
+}
+
+.viewer-context {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0;
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.8rem;
+}
+
+.viewer-context dt {
+  color: #68768a;
+  font-size: 0.8rem;
+}
+
+.viewer-context dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.axial-viewport-shell {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.85rem;
+  color: #f4f7fa;
+  background: #10151d;
+  border-radius: 0.8rem;
+  box-shadow: 0 0.5rem 1.5rem rgb(10 18 28 / 20%);
+}
+
+.axial-viewport {
+  width: 100%;
+  min-height: 32rem;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid #394555;
+  border-radius: 0.55rem;
+}
+
+.viewer-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.viewer-toolbar__tools,
+.viewer-toolbar__slices {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.viewer-tool-button[aria-pressed='true'] {
+  color: #fff;
+  background: #245b8f;
+  border-color: #6aa7df;
+}
+
+.viewer-toolbar__count {
+  min-width: 5rem;
+  text-align: center;
+}
+
+.viewer-message {
+  margin: 0;
+  padding: 1rem;
+  color: #24415f;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.65rem;
+}
+
+.viewer-message--error {
+  color: #7b1d24;
+  background: #fff0f1;
+  border-color: #e5aeb2;
+}
+
+.viewer-message--error p {
+  margin: 0 0 0.75rem;
+}
+
+@media (max-width: 48rem) {
+  .axial-viewer-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .viewer-context {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .viewer-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    flex-wrap: wrap;
+  }
+
+  .viewer-toolbar__tools,
+  .viewer-toolbar__slices {
+    flex-wrap: wrap;
+  }
+
+  .axial-viewport {
+    min-height: 24rem;
+  }
+}
+
+@media (max-width: 30rem) {
+  .viewer-context {
+    grid-template-columns: 1fr;
+  }
+}
