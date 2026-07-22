@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 将项目统一命名为“本地 CT 影像教学平台 / Local CT Imaging Lab”，同时保持业务行为、数据文件、Spec 标识和历史验收记录不变。
+**Goal:** 将项目统一命名为“本地 CT 影像教学平台 / Local CT Imaging Lab”，并将本地仓库目录迁移到 `D:\work\TestAI\local-ct-imaging-lab`，同时保持业务行为、数据文件、Spec 标识和历史验收记录不变。
 
-**Architecture:** 这是一次元数据和文档层面的重命名。产品显示名、前端 npm 元数据和 FastAPI 应用元数据分别在现有文件中更新；不改变 API 路径、React 功能组件、数据库配置或 DICOM 存储流程。GitHub 仓库重命名和本地远程地址同步作为实现后的单独远程写入步骤。
+**Architecture:** 产品显示名、前端 npm 元数据和 FastAPI 应用元数据分别在现有文件中更新，不改变 API 路径、React 功能组件、数据库配置或 DICOM 存储流程。GitHub 仓库和 `origin` 使用 `local-ct-imaging-lab`；本地仓库从父目录执行一次路径移动，移动失败时停止并保留源目录，不使用复制后删除的替代流程。历史 Spec、quickstart 和 evidence 中的旧绝对路径保持原样。
 
-**Tech Stack:** Markdown、JSON、React/Vite、FastAPI、Python、npm、uv、Git、GitHub CLI。
+**Tech Stack:** Markdown、JSON、React/Vite、FastAPI、Python、npm、uv、Git、GitHub CLI、PowerShell 文件系统命令。
 
 ---
 
@@ -22,6 +22,7 @@
 | `backend/app/main.py` | FastAPI 应用元数据 | 更新 `title` 和产品描述 |
 | `specs/`、历史 quickstart/evidence | 规格和验收事实记录 | 不修改 |
 | GitHub remote | 远程仓库身份 | 在最终远程写入确认后重命名并同步 `origin` |
+| `D:\work\TestAI\TestProj` | 本地仓库目录 | 移动为 `D:\work\TestAI\local-ct-imaging-lab` |
 
 ### Task 1: 更新 README 和浏览器产品名称
 
@@ -190,7 +191,7 @@ rg -n -i --glob '!frontend/node_modules/**' --glob '!backend/.venv/**' --glob '!
 git diff -- backend/app/core/config.py .specify specs
 ```
 
-预期：tracked diff 中 `.specify/memory/constitution.md` 只包含计划内标题和 PATCH 修订元数据，`backend/app/core/config.py` 与 `specs/` 没有重命名产生的改动；Spec Feature 编号、历史路径和数据库文件名保持原样。两份未跟踪文档在下一步单独检查，不以 `git diff` 的结果代替。
+预期：tracked diff 中 `.specify/memory/constitution.md` 只包含计划内标题和 PATCH 修订元数据，`backend/app/core/config.py` 与 `specs/` 没有重命名产生的改动；Spec Feature 编号、历史路径和数据库文件名保持原样。两份重命名文档在下一步单独检查。
 
 - [ ] **Step 3: 检查格式和工作区范围**
 
@@ -215,7 +216,7 @@ git status --short -- docs/superpowers/specs/2026-07-22-project-renaming-design.
 git status --short
 ```
 
-预期：`git diff --check` 对 tracked diff 无输出；两组 `rg` 均无命中；文档范围状态只显示上述两份 `??` 文件；根目录 `git status --short` 显示工作区只包含 `.specify/memory/constitution.md`、`README.md`、`frontend/index.html`、前端包元数据、`backend/app/main.py` 以及这两份设计和计划文档。
+预期：`git diff --check` 对 tracked diff 无输出；两组 `rg` 均无命中；文档范围状态只显示上述两份计划内文件；根目录 `git status --short` 显示工作区只包含 `.specify/memory/constitution.md`、`README.md`、`frontend/index.html`、前端包元数据、`backend/app/main.py` 以及这两份设计和计划文档。
 
 ### Task 4: 运行现有验证
 
@@ -269,16 +270,93 @@ git status --short
 
 预期：变更范围仍限于命名相关文件，测试和构建不会生成应提交的临时产物。
 
-## 最终远程写入步骤（单独确认后执行）
+## Git 写入门禁（Task 5 前完成）
 
-以下操作不在本计划的本地实现步骤中自动执行。完成 Task 1–4 后，先再次确认准确提交范围和目标，再执行：
+GitHub 仓库已重命名为私有 `lijie777/local-ct-imaging-lab`，`origin/main` 当前包含提交 `dfd6df1`。Task 5 开始前，需要先单独确认并提交、推送本次设计和计划补充改动；只有 `main` 与 `origin/main` 同步且工作区干净时才移动本地目录。
+
+### Task 5: 重命名本地仓库目录
+
+**Files:**
+- Move: `D:\work\TestAI\TestProj`
+- To: `D:\work\TestAI\local-ct-imaging-lab`
+- Preserve: `D:\work\TestAI\TestProj-evidence`
+
+- [ ] **Step 1: 检查源目录、目标目录和 Git 状态**
+
+从 `D:\work\TestAI` 运行：
 
 ```powershell
-gh repo view lijie777/TestProj --json nameWithOwner,visibility,defaultBranchRef
-gh repo rename local-ct-imaging-lab --yes
-git remote set-url origin https://github.com/lijie777/local-ct-imaging-lab.git
-git remote -v
-gh repo view lijie777/local-ct-imaging-lab --json nameWithOwner,visibility,defaultBranchRef
+$source = [System.IO.Path]::GetFullPath('D:\work\TestAI\TestProj')
+$target = [System.IO.Path]::GetFullPath('D:\work\TestAI\local-ct-imaging-lab')
+$parent = [System.IO.Path]::GetFullPath('D:\work\TestAI')
+
+if (-not $source.StartsWith($parent + [System.IO.Path]::DirectorySeparatorChar)) {
+    throw "Source is outside the intended parent: $source"
+}
+if (-not $target.StartsWith($parent + [System.IO.Path]::DirectorySeparatorChar)) {
+    throw "Target is outside the intended parent: $target"
+}
+if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+    throw "Source directory does not exist: $source"
+}
+if (Test-Path -LiteralPath $target) {
+    throw "Target directory already exists: $target"
+}
+
+git -C $source status --short --branch
+git -C $source remote get-url origin
 ```
 
-随后才在独立确认下进行 commit 和 push；提交内容只应包含 Task 1–4 的命名改动及已确认的设计/计划文档。
+预期：源目录存在，目标目录不存在；状态为 `## main...origin/main` 且工作区干净；`origin` 为 `https://github.com/lijie777/local-ct-imaging-lab.git`。
+
+- [ ] **Step 2: 从父目录移动仓库**
+
+运行：
+
+```powershell
+$source = [System.IO.Path]::GetFullPath('D:\work\TestAI\TestProj')
+$target = [System.IO.Path]::GetFullPath('D:\work\TestAI\local-ct-imaging-lab')
+Set-Location -LiteralPath 'D:\work\TestAI'
+Move-Item -LiteralPath $source -Destination $target
+```
+
+预期：命令成功且没有输出。若 Windows 报告目录正在使用或访问被拒绝，立即停止并报告锁定状态；不得复制目录、删除源目录或执行递归清理作为兜底。
+
+- [ ] **Step 3: 在新路径验证仓库身份和远端**
+
+运行：
+
+```powershell
+$source = [System.IO.Path]::GetFullPath('D:\work\TestAI\TestProj')
+$target = [System.IO.Path]::GetFullPath('D:\work\TestAI\local-ct-imaging-lab')
+if (Test-Path -LiteralPath $source) {
+    throw "Old directory still exists: $source"
+}
+if (-not (Test-Path -LiteralPath $target -PathType Container)) {
+    throw "New directory does not exist: $target"
+}
+
+git -C $target rev-parse --show-toplevel
+git -C $target branch --show-current
+git -C $target remote -v
+git -C $target status --short --branch
+```
+
+预期：仓库根为 `D:/work/TestAI/local-ct-imaging-lab`，当前分支为 `main`，fetch/push 均指向 `lijie777/local-ct-imaging-lab.git`，工作区状态与移动前一致。
+
+- [ ] **Step 4: 验证新路径下的项目元数据**
+
+运行：
+
+```powershell
+$target = [System.IO.Path]::GetFullPath('D:\work\TestAI\local-ct-imaging-lab')
+Push-Location -LiteralPath (Join-Path $target 'backend')
+uv run python -c "from app.main import app; print(app.title)"
+Pop-Location
+
+npm --prefix (Join-Path $target 'frontend') pkg get name
+```
+
+预期：后端输出 `Local CT Imaging Lab API`，前端输出 `"local-ct-imaging-lab-frontend"`。目录移动不需要重新生成依赖或构建产物。
+
+目录移动本身不产生新的 Git 内容改动。移动完成后只验证新路径，不再次提交或推送；若验证发现新的文件变化，停止并单独报告。

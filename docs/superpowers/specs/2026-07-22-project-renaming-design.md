@@ -15,6 +15,7 @@
 | 中文产品名 | `本地 CT 影像教学平台` |
 | 英文产品名 | `Local CT Imaging Lab` |
 | GitHub 仓库 | `lijie777/local-ct-imaging-lab` |
+| 本地仓库目录 | `D:\work\TestAI\local-ct-imaging-lab` |
 | 前端 npm 包 | `local-ct-imaging-lab-frontend` |
 | 浏览器标题 | `本地 CT 影像教学平台` |
 | 后端 API 标题 | `Local CT Imaging Lab API` |
@@ -31,18 +32,18 @@
 - `frontend/package-lock.json`：同步根包名字段。
 - `backend/app/main.py`：更新 FastAPI 标题和对应描述中的产品名称。
 - GitHub 远程仓库：将 `lijie777/TestProj` 重命名为 `lijie777/local-ct-imaging-lab`，并同步本地 `origin` 地址。
+- 本地仓库目录：将 `D:\work\TestAI\TestProj` 重命名为 `D:\work\TestAI\local-ct-imaging-lab`。
 
 ### 明确保留
 
 - 所有业务功能、API 路径、请求/响应字段和 OpenAPI 业务契约。
 - SQLite 文件名 `patient-management.sqlite3`、环境变量 `MEDICAL_CT_APP_DATA_DIR` 及受管 DICOM 存储布局。
-- 本地工作目录名 `TestProj`，避免破坏当前开发环境和脚本路径。
 - `specs/001-*` 至 `specs/004-*` 的 Feature 编号、目录名、设计文档和历史验收证据路径。
 - 历史 quickstart、plan 和 evidence 中出现的 `TestProj-*` 路径；它们是已完成验收的事实记录，不作为当前产品名继续使用。
 
 ## 行为与兼容性
 
-本次只改变名称和文档元数据，不改变运行时业务行为。现有 API 客户端、数据库、DICOM 文件和本地启动方式应继续可用。GitHub 仓库重命名后，GitHub 通常会保留旧地址的重定向，但本地远程地址仍需显式同步为新地址。
+本次只改变名称、文档元数据和本地仓库路径，不改变运行时业务行为。现有 API 客户端、数据库、DICOM 文件和启动命令应继续可用。GitHub 仓库重命名后，GitHub 通常会保留旧地址的重定向，但本地远程地址仍需显式同步为新地址。目录移动完成后，后续命令使用新路径；历史 Spec、quickstart 和 evidence 中记录的旧绝对路径不回写，避免篡改既有验收事实。
 
 ## 验证标准
 
@@ -52,7 +53,8 @@
 4. GitHub 仓库名称、可见性、默认分支和本地 `origin` 地址均指向新仓库名。
 5. 工作区只包含本次重命名相关改动。
 6. `.specify/memory/constitution.md` 的标题、Sync Impact Report 和底部版本行一致，版本为 `1.0.1`，Ratified 保持 `2026-07-16`，Last Amended 为 `2026-07-22`。
+7. `git rev-parse --show-toplevel` 返回 `D:/work/TestAI/local-ct-imaging-lab`，新目录下的 `main` 与 `origin/main` 保持同步，旧目录不再存在。
 
 ## 操作边界
 
-源码和文档修改完成并验证后，提交、推送以及 GitHub 仓库重命名仍作为单独的远程写入步骤执行；执行前需要再次确认准确的提交范围和目标仓库。
+补充设计与计划文档修改完成后，commit 和 push 仍作为单独的 Git 写入步骤执行；执行前需要再次确认准确范围。目录重命名只移动仓库根目录，不批量改写历史 Spec、quickstart 或 evidence 内容。
