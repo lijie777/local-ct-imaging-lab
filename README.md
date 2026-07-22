@@ -1,4 +1,4 @@
-# 本地医疗 CT 教学与三视图预览系统
+# 本地 CT 影像教学平台
 
 > 教学演示软件，不用于临床诊断。
 
@@ -106,7 +106,7 @@ data/
 如需使用独立的本机数据目录，请在执行 Alembic 和启动后端之前，在同一个后端终端设置：
 
 ```powershell
-$env:MEDICAL_CT_APP_DATA_DIR = Join-Path $env:TEMP 'TestProj-data'
+$env:MEDICAL_CT_APP_DATA_DIR = Join-Path $env:TEMP 'local-ct-imaging-lab-data'
 ```
 
 `.imports/` 只用于当前导入操作的临时落盘，操作结束后清理。删除带有影像的病人时，系统先把该病人的受管 DICOM 目录移动到 `.delete-staging/`，再提交数据库删除，避免可访问数据库记录指向已删除文件；提交后的清理如果失败，剩余文件保持隔离，并在下次应用启动时逐项重试。

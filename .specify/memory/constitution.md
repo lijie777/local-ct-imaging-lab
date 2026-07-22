@@ -1,32 +1,24 @@
 <!--
 Sync Impact Report
-- Version change: unratified template -> 1.0.0
-- Modified principles:
-  - Template Principle 1 -> I. 教学演示与非临床边界
-  - Template Principle 2 -> II. 本地离线、单用户与数据驻留
-  - Template Principle 3 -> III. 第一版范围与技术栈锁定
-  - Template Principle 4 -> IV. 小模块、明确职责与最小改动
-  - Template Principle 5 -> V. 分层自动化测试与端到端验收
-  - Added Principle 6 -> VI. DICOM 导入可追踪与存储一致性
-- Added sections:
-  - 技术与范围约束
-  - 开发流程与质量门禁
+- Version change: 1.0.0 -> 1.0.1
+- Project title: 本地医疗 CT 病人管理与三视图预览系统 -> 本地 CT 影像教学平台
+- Modified principles: None
+- Added sections: None
 - Removed sections: None
 - Templates and guidance:
-  - ✅ updated: .specify/templates/plan-template.md
-  - ✅ updated: .specify/templates/spec-template.md
-  - ✅ updated: .specify/templates/tasks-template.md
-  - ✅ reviewed: .specify/templates/constitution-template.md (generic scaffold retained)
-  - ✅ updated: .agents/skills/speckit-tasks/SKILL.md
-  - ✅ updated: .agents/skills/speckit-implement/SKILL.md
-  - ✅ updated: .agents/skills/speckit-specify/SKILL.md
-  - ✅ reviewed: remaining .agents/skills/speckit-*/SKILL.md files (no update required)
-  - ✅ updated: docs/superpowers/specs/2026-07-16-medical-ct-viewer-design.md
-  - ✅ updated: docs/superpowers/plans/2026-07-16-medical-ct-viewer-spec-kit-workflow.md
+  - ✅ reviewed: .specify/templates/plan-template.md (no update required)
+  - ✅ reviewed: .specify/templates/spec-template.md (no update required)
+  - ✅ reviewed: .specify/templates/tasks-template.md (no update required)
+  - ✅ reviewed: .specify/templates/constitution-template.md (no update required)
+  - ✅ reviewed: .agents/skills/speckit-*/SKILL.md (no update required)
+- Documentation:
+  - ✅ updated: README.md
+  - ✅ updated: docs/superpowers/specs/2026-07-22-project-renaming-design.md
+  - ✅ updated: docs/superpowers/plans/2026-07-22-project-renaming.md
 - Follow-up TODOs: None
 -->
 
-# 本地医疗 CT 病人管理与三视图预览系统项目宪章
+# 本地 CT 影像教学平台项目宪章
 
 ## Core Principles
 
@@ -103,4 +95,4 @@ DICOM 导入 MUST 逐文件处理并明确报告五类结果：成功、重复�
 以及被拒绝的更简单方案；宪章中的 MUST 不得仅靠“复杂度说明”豁免。若需求与宪章冲突，必须先
 修订宪章并完成同步影响检查，再开始实现。
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-16
+**Version**: 1.0.1 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-22

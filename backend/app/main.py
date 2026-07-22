@@ -330,10 +330,10 @@ def create_app(
 ) -> FastAPI:
     configured_storage = managed_storage or ManagedStorage(load_settings())
     application = FastAPI(
-        title="Patient Management API",
+        title="Local CT Imaging Lab API",
         version="0.3.0",
         description=(
-            "Local-only API for an educational medical CT application. "
+            "Local-only API for Local CT Imaging Lab, an educational medical CT application. "
             "Not for clinical diagnosis."
         ),
         lifespan=_application_lifespan(configured_storage),
