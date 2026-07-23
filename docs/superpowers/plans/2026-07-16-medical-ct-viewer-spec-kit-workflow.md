@@ -1,5 +1,7 @@
 # Medical CT Viewer Spec Kit Execution Plan
 
+> **状态说明（2026-07-23）：** 本文件是历史实施计划，保留未勾选项用于过程追溯；当前需求与完成状态以对应 `specs/*/spec.md` 和 `specs/*/tasks.md` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to follow this plan task-by-task. Spec Kit's generated `spec.md`, `plan.md`, and `tasks.md` remain the authoritative implementation artifacts.
 
 **Goal:** Use four complete Spec Kit feature cycles to build and verify a local Web application for patient management, real CT DICOM import, axial viewing, and linked three-view MPR.

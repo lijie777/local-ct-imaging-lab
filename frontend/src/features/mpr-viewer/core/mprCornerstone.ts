@@ -6,41 +6,30 @@ import type {
   MprTool,
   MprViewportId,
   MprViewportOrientation,
-  Point3,
 } from '../model/mprViewer'
+import {
+  abortError,
+  runtimeErrorMessage,
+  safeCall,
+  toSafeRuntimeError,
+} from './mprRuntimeErrors'
+import {
+  intersectCameraPlanes,
+  voiRange,
+  type VoiRange,
+} from './mprRuntimeGeometry'
+import type {
+  MprRuntime,
+  MprRuntimeCallbacks,
+  MprRuntimeElements,
+} from './mprRuntimeTypes'
 
-
-export interface MprRuntimeElements {
-  axial: HTMLDivElement
-  coronal: HTMLDivElement
-  sagittal: HTMLDivElement
-}
-
-export interface MprRuntimeProgress {
-  loaded: number
-  processed: number
-  total: number
-}
-
-export interface MprRuntimeCallbacks {
-  onActiveViewport(viewport: MprViewportId): void
-  onError(message: string): void
-  onOrientation?(
-    viewport: MprViewportId,
-    orientation: MprViewportOrientation,
-  ): void
-  onPosition(viewport: MprViewportId, point: Point3): void
-  onProgress(progress: MprRuntimeProgress): void
-  onReady(): void
-}
-
-export interface MprRuntime {
-  activateTool(tool: MprTool): void
-  destroy(): void
-  reset(): void
-  resize(): void
-  setCrosshairsVisible(visible: boolean): void
-}
+export type {
+  MprRuntime,
+  MprRuntimeCallbacks,
+  MprRuntimeElements,
+  MprRuntimeProgress,
+} from './mprRuntimeTypes'
 
 interface VolumeLoadResult {
   framesLoaded?: number
@@ -54,26 +43,12 @@ interface StreamingVolume {
   load(callback: (result: VolumeLoadResult) => void): void
 }
 
-interface VoiRange {
-  lower: number
-  upper: number
-}
-
 const VIEWPORTS = ['axial', 'coronal', 'sagittal'] as const
 const RENDERING_ENGINE_PREFIX = 'mpr-rendering-'
 const VIEWPORT_PREFIX = 'mpr-viewport-'
 const TOOL_GROUP_PREFIX = 'mpr-tools-'
 const VOLUME_PREFIX = 'cornerstoneStreamingImageVolume:mpr-'
 const partialLoadMessage = '部分影像加载失败，无法完整构建三视图，请重试或返回轴位查看器'
-const runtimeErrorMessage = '无法构建三视图，请重试或返回轴位查看器'
-const runtimeErrorByStatus: Record<number, string> = {
-  0: '无法连接本机服务，请确认服务已启动',
-  404: '未找到该影像实例，请返回轴位查看器',
-  409: '该序列暂不可查看，请返回轴位查看器',
-  410: '本机 DICOM 文件缺失，请恢复文件后重试或返回轴位查看器',
-  422: '影像请求无效，请返回轴位查看器',
-  500: '本机影像服务异常，请重试或返回轴位查看器',
-}
 const registeredTools = new Set<string>()
 let runtimeSequence = 0
 
@@ -83,116 +58,8 @@ const DEFAULT_ORIENTATIONS: Record<MprViewportId, MprViewportOrientation> = {
   sagittal: { top: 'S', right: 'P', bottom: 'I', left: 'A' },
 }
 
-function abortError(): DOMException {
-  return new DOMException('MPR runtime creation cancelled', 'AbortError')
-}
-
-function safeCall(action: () => void): void {
-  try {
-    action()
-  } catch {
-    // Resource cleanup is best-effort and must continue through later owners.
-  }
-}
-
-function errorStatus(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null) {
-    return undefined
-  }
-  const directStatus = (error as { status?: unknown }).status
-  if (typeof directStatus === 'number') {
-    return directStatus
-  }
-  const requestStatus = (error as { request?: { status?: unknown } }).request?.status
-  return typeof requestStatus === 'number' ? requestStatus : undefined
-}
-
-function toSafeRuntimeError(error: unknown): string {
-  const status = errorStatus(error)
-  return status === undefined
-    ? runtimeErrorMessage
-    : (runtimeErrorByStatus[status] ?? runtimeErrorByStatus[500])
-}
-
 function hasNonZeroSize(element: HTMLDivElement): boolean {
   return element.clientWidth > 0 && element.clientHeight > 0
-}
-
-function point3(value: unknown): Point3 | null {
-  if (
-    !Array.isArray(value) ||
-    value.length !== 3 ||
-    !value.every((component) => typeof component === 'number' && Number.isFinite(component))
-  ) {
-    return null
-  }
-  return [value[0], value[1], value[2]]
-}
-
-function dot(left: Point3, right: Point3): number {
-  return left[0] * right[0] + left[1] * right[1] + left[2] * right[2]
-}
-
-function cross(left: Point3, right: Point3): Point3 {
-  return [
-    left[1] * right[2] - left[2] * right[1],
-    left[2] * right[0] - left[0] * right[2],
-    left[0] * right[1] - left[1] * right[0],
-  ]
-}
-
-function intersectCameraPlanes(cameras: Array<{
-  focalPoint?: unknown
-  viewPlaneNormal?: unknown
-}>): Point3 | null {
-  if (cameras.length !== 3) {
-    return null
-  }
-  const planes = cameras.map((camera) => ({
-    normal: point3(camera.viewPlaneNormal),
-    point: point3(camera.focalPoint),
-  }))
-  if (planes.some(({ normal, point }) => normal === null || point === null)) {
-    return null
-  }
-  const [first, second, third] = planes as Array<{
-    normal: Point3
-    point: Point3
-  }>
-  const secondCrossThird = cross(second.normal, third.normal)
-  const denominator = dot(first.normal, secondCrossThird)
-  if (Math.abs(denominator) < 1e-8) {
-    return null
-  }
-  const thirdCrossFirst = cross(third.normal, first.normal)
-  const firstCrossSecond = cross(first.normal, second.normal)
-  const distances = planes.map(({ normal, point }) => dot(normal!, point!))
-  const coordinate = (component: 0 | 1 | 2) => {
-    const value = (
-      distances[0] * secondCrossThird[component] +
-      distances[1] * thirdCrossFirst[component] +
-      distances[2] * firstCrossSecond[component]
-    ) / denominator
-    return Object.is(value, -0) ? 0 : value
-  }
-  const intersection: Point3 = [coordinate(0), coordinate(1), coordinate(2)]
-  return intersection.every(Number.isFinite) ? intersection : null
-}
-
-function voiRange(value: unknown): VoiRange | null {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    !('lower' in value) ||
-    !('upper' in value) ||
-    typeof value.lower !== 'number' ||
-    typeof value.upper !== 'number' ||
-    !Number.isFinite(value.lower) ||
-    !Number.isFinite(value.upper)
-  ) {
-    return null
-  }
-  return { lower: value.lower, upper: value.upper }
 }
 
 export async function createMprRuntime(

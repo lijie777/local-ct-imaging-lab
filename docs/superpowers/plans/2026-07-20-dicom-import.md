@@ -1,5 +1,7 @@
 # DICOM Import and Persistence Implementation Plan
 
+> **状态说明（2026-07-23）：** 本文件是历史实施计划，保留未勾选项用于过程追溯；当前需求与完成状态以对应 `specs/*/spec.md` 和 `specs/*/tasks.md` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add local CT DICOM import, Study/Series/Instance persistence, five-category reporting, restart persistence, and patient-delete cleanup to the existing patient-management application.

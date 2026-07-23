@@ -2,7 +2,7 @@
 
 ## 1. Prerequisites
 
-- Windows PowerShell，仓库根目录 `D:\work\TestAI\TestProj`。
+- Windows PowerShell；以下当前命令均从仓库根目录开始执行。
 - 后端依赖已安装，前端已安装 Cornerstone3D 5.6.8 三个现有直接依赖。
 - Chrome 支持 WebGL 与 Web Worker。
 - 验收数据必须为已脱敏、本机 CT DICOM；至少三张，具有 PixelSpacing、ImagePositionPatient、
@@ -12,12 +12,15 @@
 ## 2. Automated Verification
 
 ```powershell
-cd D:\work\TestAI\TestProj\backend
-uv run pytest -q
+Push-Location backend
+uv run python -m pytest -q -p no:cacheprovider
+Pop-Location
 
-cd D:\work\TestAI\TestProj\frontend
+Push-Location frontend
+npm ci
 npm test -- --run
 npm run build
+Pop-Location
 ```
 
 Expected:
@@ -34,7 +37,7 @@ Expected:
 - 003 production build: PASS，`1950` modules transformed；Cornerstone externalization 和大 chunk warning
   为已知非阻断项。
 - 003 真实 DICOM/Chrome 证据：
-  `C:\Users\lijie\AppData\Local\Temp\TestProj-003-Final-20260720-135352`。
+  `%TEMP%\TestProj-003-Final-20260720-135352`。
 
 ## 3. Isolated Runtime
 
@@ -48,7 +51,7 @@ New-Item -ItemType Directory -Path $evidence -Force | Out-Null
 终端 1：
 
 ```powershell
-cd D:\work\TestAI\TestProj\backend
+Set-Location backend
 uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
@@ -56,7 +59,7 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 终端 2：
 
 ```powershell
-cd D:\work\TestAI\TestProj\frontend
+Set-Location frontend
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
@@ -71,6 +74,8 @@ npm run dev -- --host 127.0.0.1 --port 5173
 5. 导入后保存 fixture 在独立 data directory 中的恢复方式，用于 missing-file 验收。
 
 ## 5. Real Chrome Acceptance
+
+> 以下 evidence 路径是历史本机验收记录，使用 `%TEMP%` 表示当时的用户临时目录；证据文件不随仓库分发。
 
 ### A. Entry, eligibility, and default views
 
@@ -129,7 +134,7 @@ npm run dev -- --host 127.0.0.1 --port 5173
 ### US1 checkpoint: T033-T034 (2026-07-21)
 
 ```text
-Evidence directory: C:\Users\lijie\AppData\Local\Temp\TestProj-004-US1-20260721-103403
+Evidence directory: %TEMP%\TestProj-004-US1-20260721-103403
 Frontend full regression: 28 test files, 177 tests passed
 Targeted runtime regression: 1 test file, 10 tests passed
 Production build: PASS, 1957 modules transformed
@@ -154,7 +159,7 @@ Deferred A-B items: deleted/unsupported revalidation, rapid continuous interacti
 ### US2 checkpoint: T050-T052 (2026-07-21)
 
 ```text
-Evidence directory: C:\Users\lijie\AppData\Local\Temp\TestProj-004-US2-20260721-131713
+Evidence directory: %TEMP%\TestProj-004-US2-20260721-131713
 Browser availability: Browser plugin invocation previously failed because the tool layer omitted sandboxPolicy metadata;
                       reused the existing temporary Playwright installation without adding a dependency
 Targeted US2 regression: 5 test files, 31 tests passed
@@ -182,7 +187,7 @@ Screenshots: 01-window-level-synchronized.png, 02-crosshairs-hidden.png,
 ### US3 checkpoint: T067-T068 (2026-07-21)
 
 ```text
-Evidence directory: C:\Users\lijie\AppData\Local\Temp\TestProj-004-US3-20260721-134928
+Evidence directory: %TEMP%\TestProj-004-US3-20260721-134928
 Targeted US3 regression: 5 test files, 73 tests passed
 Frontend full regression: 30 test files, 219 tests passed
 Production build: PASS, 1958 modules transformed; existing Cornerstone externalization and large chunk warnings only
@@ -218,7 +223,7 @@ Dependency check: no backend product change, database migration, or new npm dire
 ### Final isolated A-E acceptance: T074-T075 (2026-07-21)
 
 ```text
-Evidence directory: C:\Users\lijie\AppData\Local\Temp\TestProj-004-Final-20260721-142304
+Evidence directory: %TEMP%\TestProj-004-Final-20260721-142304
 Data setup: fresh SQLite upgraded with `uv run alembic upgrade head`; six de-identified fixtures copied into the
             isolated managed DICOM directory; no default `data/` was read or modified
 Chrome: 150.0.7871.114, system Chrome, headless Playwright fallback

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from uuid import UUID
 
@@ -28,11 +30,26 @@ SECOND_STAGED_DELETE = (
 )
 
 
-def _create_directory_symlink(link: Path, target: Path) -> None:
+def _create_directory_link(link: Path, target: Path) -> None:
     try:
         os.symlink(target, link, target_is_directory=True)
-    except OSError as error:
-        pytest.skip(f"real directory symlink unavailable: {error}")
+        return
+    except OSError as symlink_error:
+        if sys.platform != "win32":
+            pytest.skip(f"real directory link unavailable: {symlink_error}")
+
+    try:
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as junction_error:
+        pytest.skip(
+            "real directory link unavailable via symlink and junction: "
+            f"{junction_error}"
+        )
 
 
 def _metadata() -> DicomMetadata:
@@ -249,7 +266,7 @@ def test_staged_patient_directory_rejects_path_outside_staging_root(
     assert outside_path.is_dir()
 
 
-def test_real_staging_root_symlink_is_rejected_without_following_target(
+def test_real_staging_root_link_is_rejected_without_following_target(
     tmp_path: Path,
 ) -> None:
     storage = ManagedStorage(load_settings(data_dir_override=tmp_path))
@@ -257,7 +274,7 @@ def test_real_staging_root_symlink_is_rejected_without_following_target(
     patient_directory.mkdir(parents=True)
     root_target = tmp_path / "root-symlink-target"
     root_target.mkdir()
-    _create_directory_symlink(storage.delete_staging_dir, root_target)
+    _create_directory_link(storage.delete_staging_dir, root_target)
 
     with pytest.raises(UnsafeManagedPathError):
         storage.stage_patient_delete(PATIENT_ID)
@@ -267,7 +284,7 @@ def test_real_staging_root_symlink_is_rejected_without_following_target(
     assert root_target.is_dir()
 
 
-def test_real_staged_child_symlink_is_rejected_without_following_target(
+def test_real_staged_child_link_is_rejected_without_following_target(
     tmp_path: Path,
 ) -> None:
     storage = ManagedStorage(load_settings(data_dir_override=tmp_path))
@@ -277,7 +294,7 @@ def test_real_staged_child_symlink_is_rejected_without_following_target(
     sentinel = child_target / "keep.txt"
     sentinel.write_text("keep", encoding="utf-8")
     child_link = storage.delete_staging_dir / FIRST_STAGED_DELETE
-    _create_directory_symlink(child_link, child_target)
+    _create_directory_link(child_link, child_target)
     staged = StagedPatientDirectory(
         PATIENT_ID,
         storage.patient_directory(PATIENT_ID),
@@ -290,7 +307,7 @@ def test_real_staged_child_symlink_is_rejected_without_following_target(
         storage.purge_patient_delete(staged)
 
     assert storage.cleanup_pending_patient_deletes() == 1
-    assert child_link.is_symlink()
+    assert child_link.is_symlink() or child_link.is_junction()
     assert sentinel.read_text(encoding="utf-8") == "keep"
 
 
@@ -426,3 +443,68 @@ def test_cleanup_pending_patient_deletes_keeps_uncontained_directory(
     assert failed == 1
     assert unsafe_directory.is_dir()
     assert not safe_directory.exists()
+
+
+def test_cleanup_pending_imports_removes_safe_session_directories(
+    tmp_path: Path,
+) -> None:
+    storage = ManagedStorage(load_settings(data_dir_override=tmp_path))
+    first = storage.imports_dir / "first"
+    second = storage.imports_dir / "second"
+    first.mkdir(parents=True)
+    second.mkdir()
+    (first / "file.upload").write_bytes(b"first")
+    (second / "file.upload").write_bytes(b"second")
+
+    failed = storage.cleanup_pending_imports()
+
+    assert failed == 0
+    assert not first.exists()
+    assert not second.exists()
+
+
+def test_cleanup_pending_imports_keeps_unexpected_files_and_links(
+    tmp_path: Path,
+) -> None:
+    storage = ManagedStorage(load_settings(data_dir_override=tmp_path))
+    unexpected_file = storage.imports_dir / "keep.txt"
+    unexpected_file.parent.mkdir(parents=True)
+    unexpected_file.write_text("keep", encoding="utf-8")
+    target = tmp_path / "outside-imports"
+    target.mkdir()
+    sentinel = target / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    linked = storage.imports_dir / "linked"
+    _create_directory_link(linked, target)
+
+    failed = storage.cleanup_pending_imports()
+
+    assert failed == 2
+    assert unexpected_file.read_text(encoding="utf-8") == "keep"
+    assert linked.is_symlink() or linked.is_junction()
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_cleanup_pending_imports_continues_after_rmtree_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = ManagedStorage(load_settings(data_dir_override=tmp_path))
+    first = storage.imports_dir / "first"
+    second = storage.imports_dir / "second"
+    first.mkdir(parents=True)
+    second.mkdir()
+    original_rmtree = shutil.rmtree
+
+    def fail_first(path: Path) -> None:
+        if path.name == "first":
+            raise OSError("forced cleanup failure")
+        original_rmtree(path)
+
+    monkeypatch.setattr("app.services.managed_storage.shutil.rmtree", fail_first)
+
+    failed = storage.cleanup_pending_imports()
+
+    assert failed == 1
+    assert first.is_dir()
+    assert not second.exists()

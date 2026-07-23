@@ -112,6 +112,24 @@ def test_startup_cleans_pending_patient_delete(
         assert not pending.exists()
 
 
+def test_startup_cleans_pending_import_session(
+    session_factory: sessionmaker[Session],
+    managed_storage: ManagedStorage,
+) -> None:
+    pending = managed_storage.imports_dir / "pending-import"
+    pending.mkdir(parents=True)
+    (pending / "00000000.upload").write_bytes(b"temporary")
+    application = create_app(
+        session_factory=session_factory,
+        managed_storage=managed_storage,
+    )
+
+    with TestClient(application) as startup_client:
+        assert startup_client.get("/api/patients").status_code == 200
+
+    assert not pending.exists()
+
+
 def test_startup_cleanup_warning_does_not_block_service_or_leak_paths(
     session_factory: sessionmaker[Session],
     managed_storage: ManagedStorage,

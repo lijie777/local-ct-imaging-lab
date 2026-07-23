@@ -1,5 +1,7 @@
 # Project Rename Implementation Plan
 
+> **状态说明（2026-07-23）：** 本文件是历史实施计划，保留未勾选项用于过程追溯；当前需求与完成状态以对应 `specs/*/spec.md` 和 `specs/*/tasks.md` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将项目统一命名为“本地 CT 影像教学平台 / Local CT Imaging Lab”，并将本地仓库目录迁移到 `D:\work\TestAI\local-ct-imaging-lab`，同时保持业务行为、数据文件、Spec 标识和历史验收记录不变。

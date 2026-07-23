@@ -1,5 +1,7 @@
 # 本地 CT 三视图 MPR Implementation Plan
 
+> **状态说明（2026-07-23）：** 本文件是历史实施计划，保留未勾选项用于过程追溯；当前需求与完成状态以对应 `specs/*/spec.md` 和 `specs/*/tasks.md` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在已完成的单轴位查看页中增加可进入、可返回、可重试的轴位/冠状位/矢状位联动 MPR，并保留轴位降级路径。

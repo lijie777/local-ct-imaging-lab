@@ -1,5 +1,7 @@
 # 项目发布与删除残留自动清理 Implementation Plan
 
+> **状态说明（2026-07-23）：** 本文件是历史实施计划，保留未勾选项用于过程追溯；当前需求与完成状态以对应 `specs/*/spec.md` 和 `specs/*/tasks.md` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 为病人删除隔离残留增加安全的启动时自动重试清理，补齐项目 README 和最新验收记录，并在最终确认后首次发布到私有 GitHub 仓库。

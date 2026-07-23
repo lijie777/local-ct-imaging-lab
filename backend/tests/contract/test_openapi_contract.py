@@ -23,6 +23,30 @@ def _runtime_openapi(application: FastAPI) -> dict[str, Any]:
     return application.openapi()
 
 
+def _design_operation(path: str, method: str) -> str:
+    lines = CONTRACT_PATH.read_text(encoding="utf-8").splitlines()
+    path_start = lines.index(f"  {path}:")
+    path_end = next(
+        (
+            index
+            for index in range(path_start + 1, len(lines))
+            if lines[index].startswith("  /")
+        ),
+        len(lines),
+    )
+    method_start = lines.index(f"    {method}:", path_start, path_end)
+    method_end = next(
+        (
+            index
+            for index in range(method_start + 1, path_end)
+            if lines[index].startswith("    ")
+            and not lines[index].startswith("      ")
+        ),
+        path_end,
+    )
+    return "\n".join(lines[method_start:method_end])
+
+
 def test_design_contract_declares_local_patient_api_and_public_schemas() -> None:
     contract = CONTRACT_PATH.read_text(encoding="utf-8")
 
@@ -44,8 +68,10 @@ def test_design_contract_declares_local_patient_api_and_public_schemas() -> None
         "SeriesDetailRead:",
         "ErrorResponse:",
         "PersistenceError:",
+        "ImportLimitExceeded:",
         '"201":',
         '"409":',
+        '"413":',
         '"422":',
         '"500":',
     ):
@@ -53,6 +79,19 @@ def test_design_contract_declares_local_patient_api_and_public_schemas() -> None
     assert "medical_record_no_normalized:" not in contract
     assert "name: q" in contract
     assert "patch:" in contract
+
+
+def test_design_contract_scopes_413_to_dicom_import() -> None:
+    patient_detail = _design_operation("/api/patients/{id}", "get")
+    dicom_import = _design_operation(
+        "/api/patients/{patient_id}/dicom-import",
+        "post",
+    )
+
+    assert '"413":' not in patient_detail
+    assert '"413":' in dicom_import
+    assert "#/components/responses/ImportLimitExceeded" in dicom_import
+    assert "maxItems: 2000" in dicom_import
 
 
 def test_runtime_patient_schemas_match_public_contract(application: FastAPI) -> None:
@@ -105,12 +144,21 @@ def test_runtime_dicom_import_and_study_contracts(application: FastAPI) -> None:
     paths = openapi["paths"]
     schemas = openapi["components"]["schemas"]
 
+    request_schema_ref = paths["/api/patients/{patient_id}/dicom-import"][
+        "post"
+    ]["requestBody"]["content"]["multipart/form-data"]["schema"]["$ref"]
+    request_schema = schemas[request_schema_ref.rsplit("/", 1)[-1]]
+    assert request_schema["properties"]["files"]["maxItems"] == 2_000
+
     assert paths["/api/patients/{patient_id}/dicom-import"]["post"][
         "operationId"
     ] == "importPatientDicom"
     assert set(
         paths["/api/patients/{patient_id}/dicom-import"]["post"]["responses"]
-    ) == {"200", "404", "422", "500"}
+    ) == {"200", "404", "413", "422", "500"}
+    assert paths["/api/patients/{patient_id}/dicom-import"]["post"]["responses"][
+        "413"
+    ] == {"$ref": "#/components/responses/ImportLimitExceeded"}
     assert paths["/api/patients/{patient_id}/studies"]["get"][
         "operationId"
     ] == "listPatientStudies"

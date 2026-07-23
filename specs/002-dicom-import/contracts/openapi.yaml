@@ -147,6 +147,8 @@ paths:
                 files:
                   type: array
                   minItems: 1
+                  maxItems: 2000
+                  description: Each file is limited to 512 MiB and the batch is limited to 8 GiB
                   items:
                     type: string
                     format: binary
@@ -159,6 +161,8 @@ paths:
                 $ref: "#/components/schemas/ImportReport"
         "404":
           $ref: "#/components/responses/PatientNotFound"
+        "413":
+          $ref: "#/components/responses/ImportLimitExceeded"
         "422":
           $ref: "#/components/responses/ValidationError"
         "500":
@@ -621,6 +625,7 @@ components:
             - patient_not_found
             - study_not_found
             - series_not_found
+            - import_limit_exceeded
             - persistence_error
         message:
           type: string
@@ -668,6 +673,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     PersistenceError:
       description: Local persistence or managed-file operation failed; internal details are not returned
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ImportLimitExceeded:
+      description: Import file count or byte size exceeds the local teaching limit
       content:
         application/json:
           schema:

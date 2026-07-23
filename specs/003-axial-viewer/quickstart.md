@@ -2,8 +2,8 @@
 
 ## 1. Prerequisites
 
-- Windows PowerShell，仓库根目录为 `D:\work\TestAI\TestProj`。
-- 后端依赖已由 `uv sync` 安装，前端依赖已由 `npm install` 安装。
+- Windows PowerShell；以下当前命令均从仓库根目录开始执行。
+- 后端依赖由 `uv sync --locked --group dev` 安装，前端依赖由 `npm ci` 安装。
 - Chrome 可用，并允许本机 WebGL 与 Web Worker。
 - 验收数据必须为已脱敏的本机 CT DICOM；不得使用真实可识别病人数据。
 - 使用新的独立临时数据目录，不读取或修改默认 `data/`。
@@ -11,12 +11,15 @@
 ## 2. Automated Verification
 
 ```powershell
-cd D:\work\TestAI\TestProj\backend
-uv run pytest -q
+Push-Location backend
+uv run python -m pytest -q -p no:cacheprovider
+Pop-Location
 
-cd D:\work\TestAI\TestProj\frontend
+Push-Location frontend
+npm ci
 npm test -- --run
 npm run build
+Pop-Location
 ```
 
 Expected:
@@ -46,7 +49,7 @@ New-Item -ItemType Directory -Path $evidence -Force | Out-Null
 终端 1：
 
 ```powershell
-cd D:\work\TestAI\TestProj\backend
+Set-Location backend
 uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
@@ -54,7 +57,7 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 终端 2：
 
 ```powershell
-cd D:\work\TestAI\TestProj\frontend
+Set-Location frontend
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
@@ -68,6 +71,8 @@ npm run dev -- --host 127.0.0.1 --port 5173
 4. 记录 Patient、Study、Series 和实例数量；不在证据中记录内部 UUID 或服务器绝对路径。
 
 ## 5. Real Chrome Acceptance
+
+> 以下 evidence 路径是历史本机验收记录，使用 `%TEMP%` 表示当时的用户临时目录；证据文件不随仓库分发。
 
 ### A. Entry and default image
 
@@ -110,7 +115,7 @@ npm run dev -- --host 127.0.0.1 --port 5173
 ### 2026-07-20 final acceptance
 
 - Evidence directory:
-  `C:\Users\lijie\AppData\Local\Temp\TestProj-003-Final-20260720-135352`.
+  `%TEMP%\TestProj-003-Final-20260720-135352`.
 - Backend: `119 passed, 1 warning`; the warning is the existing
   `StarletteDeprecationWarning` for FastAPI TestClient/httpx compatibility.
 - Frontend: `23` test files, `115 passed`.

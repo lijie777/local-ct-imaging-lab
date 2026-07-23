@@ -1,5 +1,7 @@
 # 代码审查问题修复 Implementation Plan
 
+> **状态说明（2026-07-23）：** 本文件是历史实施计划，保留未勾选项用于过程追溯；当前需求与完成状态以对应 `specs/*/spec.md` 和 `specs/*/tasks.md` 为准。
+
 **Goal:** 用最小改动修复五个已确认的一致性问题，并用回归测试固定行为。
 
 **Architecture:** 后端明确区分可逆删除阶段与提交后的隔离清理阶段，并统一 DICOM 方向容差；前端用受保护的保存关闭路径、runtime `resize()` 接口和显式就绪状态保持 React 与 Cornerstone 行为一致。

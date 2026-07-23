@@ -3,14 +3,16 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy.orm import Session, sessionmaker
+from starlette.staticfiles import StaticFiles
 
 from app.api import api_router
 from app.core.errors import register_error_handlers
-from app.core.config import load_settings
+from app.core.config import PROJECT_ROOT, load_settings
 from app.db.session import SessionLocal
 from app.services.managed_storage import ManagedStorage
 
@@ -29,6 +31,13 @@ def _application_lifespan(
                 "%d pending patient deletion item(s) could not be cleaned; "
                 "cleanup will be retried on the next application start",
                 failed,
+            )
+        failed_imports = storage.cleanup_pending_imports()
+        if failed_imports > 0:
+            logger.warning(
+                "%d pending import session(s) could not be cleaned; "
+                "cleanup will be retried on the next application start",
+                failed_imports,
             )
         yield
 
@@ -86,6 +95,7 @@ def _configure_contract_openapi(application: FastAPI) -> None:
             "instance_not_found",
             "series_not_viewable",
             "dicom_file_missing",
+            "import_limit_exceeded",
             "persistence_error",
         ]
         schemas["FieldError"]["properties"]["field"]["enum"] = [
@@ -184,6 +194,10 @@ def _configure_contract_openapi(application: FastAPI) -> None:
                 "description": "Local persistence failed",
                 "content": {"application/json": {"schema": error_schema}},
             },
+            "ImportLimitExceeded": {
+                "description": "The import exceeds the local teaching limits",
+                "content": {"application/json": {"schema": error_schema}},
+            },
         }
 
         paths = schema["paths"]
@@ -251,6 +265,7 @@ def _configure_contract_openapi(application: FastAPI) -> None:
         import_operation["responses"] = {
             "200": import_operation["responses"]["200"],
             "404": {"$ref": "#/components/responses/PatientNotFound"},
+            "413": {"$ref": "#/components/responses/ImportLimitExceeded"},
             "422": {"$ref": "#/components/responses/ValidationError"},
             "500": {"$ref": "#/components/responses/PersistenceError"},
         }
@@ -327,6 +342,7 @@ def create_app(
     *,
     session_factory: sessionmaker[Session] | None = None,
     managed_storage: ManagedStorage | None = None,
+    frontend_dist_override: Path | None = None,
 ) -> FastAPI:
     configured_storage = managed_storage or ManagedStorage(load_settings())
     application = FastAPI(
@@ -343,6 +359,13 @@ def create_app(
     register_error_handlers(application)
     application.include_router(api_router, prefix="/api")
     _configure_contract_openapi(application)
+    frontend_dist = frontend_dist_override or PROJECT_ROOT / "frontend" / "dist"
+    if (frontend_dist / "index.html").is_file():
+        application.mount(
+            "/",
+            StaticFiles(directory=frontend_dist, html=True),
+            name="frontend",
+        )
     return application
 
 

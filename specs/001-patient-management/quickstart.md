@@ -8,7 +8,7 @@
 
 - Windows PowerShell
 - `uv`，用于安装和锁定 Python 3.12 环境
-- Node.js 20 或更高版本及 npm
+- Node.js 24.15.x 与 npm 11.12.x
 - 本机现代浏览器
 - 后端端口 `127.0.0.1:8000` 和前端端口 `127.0.0.1:5173` 可用
 
@@ -20,14 +20,16 @@ node --version
 npm --version
 ```
 
+以下当前命令均从仓库根目录开始执行。
+
 ## Backend Setup
 
 ```powershell
-cd D:\work\TestAI\TestProj\backend
+cd backend
 uv python install 3.12
-uv sync
+uv sync --locked --group dev
 uv run alembic upgrade head
-uv run pytest
+uv run python -m pytest -q -p no:cacheprovider
 ```
 
 预期：
@@ -46,7 +48,7 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 默认运行数据库：
 
 ```text
-D:\work\TestAI\TestProj\data\patient-management.sqlite3
+data\patient-management.sqlite3
 ```
 
 需要使用其他本机运行目录时，在启动前设置：
@@ -68,7 +70,7 @@ Invoke-RestMethod -Method Get -Uri 'http://127.0.0.1:8000/api/patients'
 打开新的 PowerShell：
 
 ```powershell
-cd D:\work\TestAI\TestProj\frontend
+cd frontend
 npm ci
 npm run test -- --run
 npm run build
@@ -137,6 +139,8 @@ specs/001-patient-management/contracts/openapi.yaml
 
 ## Browser Acceptance Record
 
+> 以下 evidence 路径是历史本机验收记录，使用 `%TEMP%` 表示当时的用户临时目录；证据文件不随仓库分发。
+
 实现完成后，按 `spec.md` 的八步路径在真实浏览器中逐项执行。不要用组件测试结果代填“实际结果”。
 
 ### Environment
@@ -149,7 +153,7 @@ specs/001-patient-management/contracts/openapi.yaml
 | Python / uv 版本 | Python 3.12.13 / uv 0.11.28 |
 | Node / npm 版本 | Node.js v24.15.0 / npm 11.12.1 |
 | 浏览器及版本 | Chrome 150.0.0.0；viewport 1080 × 1309；devicePixelRatio 1 |
-| SQLite 实际路径 | `C:\Users\lijie\AppData\Local\Temp\TestProj-T057-Final-20260717-174325\data\patient-management.sqlite3` |
+| SQLite 实际路径 | `%TEMP%\TestProj-T057-Final-20260717-174325\data\patient-management.sqlite3` |
 
 ### MVP Browser Checkpoint (T032)
 
@@ -157,10 +161,10 @@ specs/001-patient-management/contracts/openapi.yaml
 
 | 步骤 | 实际结果 | Pass/Fail | 证据/截图路径 |
 | --- | --- | --- | --- |
-| 打开空病人列表 | 页面标题为“病人管理教学演示”；显示完整免责声明、空状态和创建入口；页面无 UUID | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T032-Final-20260717-170234\01-empty-list.png` |
-| 打开创建界面并创建虚构病人 | 原生 dialog 打开后焦点进入病历号输入框，dialog 内重复完整免责声明；POST 返回 201 和 `Location` header | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T032-Final-20260717-170234\02-create-dialog.png`、`03-created-details.png` |
-| 查看病人详情 | 显示病历号、姓名、性别、出生日期、检查数量 0、最近检查日期空值、创建时间和最近更新时间；UUID 不可见；关闭 dialog 后焦点恢复到创建按钮 | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T032-Final-20260717-170234\03-created-details.png` |
-| 重启后端并刷新 | 后端 PID 从 44524 变为 62752；使用同一 SQLite 文件；API 和浏览器重新读到 `MR-T032-FINAL`、`虚构病人验收` 和 `1990-05-20` | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T032-Final-20260717-170234\04-restart-persistence.png` |
+| 打开空病人列表 | 页面标题为“病人管理教学演示”；显示完整免责声明、空状态和创建入口；页面无 UUID | Pass | `%TEMP%\TestProj-T032-Final-20260717-170234\01-empty-list.png` |
+| 打开创建界面并创建虚构病人 | 原生 dialog 打开后焦点进入病历号输入框，dialog 内重复完整免责声明；POST 返回 201 和 `Location` header | Pass | `%TEMP%\TestProj-T032-Final-20260717-170234\02-create-dialog.png`、`03-created-details.png` |
+| 查看病人详情 | 显示病历号、姓名、性别、出生日期、检查数量 0、最近检查日期空值、创建时间和最近更新时间；UUID 不可见；关闭 dialog 后焦点恢复到创建按钮 | Pass | `%TEMP%\TestProj-T032-Final-20260717-170234\03-created-details.png` |
+| 重启后端并刷新 | 后端 PID 从 44524 变为 62752；使用同一 SQLite 文件；API 和浏览器重新读到 `MR-T032-FINAL`、`虚构病人验收` 和 `1990-05-20` | Pass | `%TEMP%\TestProj-T032-Final-20260717-170234\04-restart-persistence.png` |
 
 浏览器请求只访问 `127.0.0.1:5173`、Vite 代理的 `/api`、`127.0.0.1:8000` 和内联 `data:`
 资源。控制台没有业务运行异常；存在一个非阻塞 `favicon.ico` 404，以及 Chrome 对表单字段缺少
@@ -172,14 +176,14 @@ specs/001-patient-management/contracts/openapi.yaml
 
 执行前自动化基线：后端 `58 passed`；前端 `58 passed`；Vite production build 成功。使用两位
 预置虚构病人，SQLite 路径为
-`C:\Users\lijie\AppData\Local\Temp\TestProj-T044-Final-20260717-172211\data\patient-management.sqlite3`。
+`%TEMP%\TestProj-T044-Final-20260717-172211\data\patient-management.sqlite3`。
 
 | 步骤 | 实际结果 | Pass/Fail | 证据/截图路径 |
 | --- | --- | --- | --- |
-| 搜索虚构病人 | 输入首尾带空格且大小写不同的 `alpha`，只返回 `Alpha Patient / MR-US2-ALPHA`；`Beta Patient` 不在结果中；免责声明持续可见 | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T044-Final-20260717-172211\01-search-result.png` |
-| 编辑成功 | 编辑 dialog 载入原始字段并重复完整免责声明；将姓名改为 `Alpha Updated` 后，列表和详情均使用服务器返回值更新 | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T044-Final-20260717-172211\02-edit-success.png` |
-| 失败输入保留 | 将病历号改为与 `MR-US2-BETA` 等价的 `  mr-us2-beta  ` 并把姓名改为 `Draft Retained`；PATCH 返回 409，dialog 保持打开，字段草稿、字段错误和重复免责声明全部保留 | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T044-Final-20260717-172211\03-failure-draft-retained.png` |
-| 重启后端后保留编辑 | 后端 PID 从 48852 变为 31120；使用同一 SQLite 文件；刷新后搜索 `updated` 仍只返回 `Alpha Updated / MR-US2-ALPHA`，页面无 UUID | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T044-Final-20260717-172211\04-restart-persistence.png` |
+| 搜索虚构病人 | 输入首尾带空格且大小写不同的 `alpha`，只返回 `Alpha Patient / MR-US2-ALPHA`；`Beta Patient` 不在结果中；免责声明持续可见 | Pass | `%TEMP%\TestProj-T044-Final-20260717-172211\01-search-result.png` |
+| 编辑成功 | 编辑 dialog 载入原始字段并重复完整免责声明；将姓名改为 `Alpha Updated` 后，列表和详情均使用服务器返回值更新 | Pass | `%TEMP%\TestProj-T044-Final-20260717-172211\02-edit-success.png` |
+| 失败输入保留 | 将病历号改为与 `MR-US2-BETA` 等价的 `  mr-us2-beta  ` 并把姓名改为 `Draft Retained`；PATCH 返回 409，dialog 保持打开，字段草稿、字段错误和重复免责声明全部保留 | Pass | `%TEMP%\TestProj-T044-Final-20260717-172211\03-failure-draft-retained.png` |
+| 重启后端后保留编辑 | 后端 PID 从 48852 变为 31120；使用同一 SQLite 文件；刷新后搜索 `updated` 仍只返回 `Alpha Updated / MR-US2-ALPHA`，页面无 UUID | Pass | `%TEMP%\TestProj-T044-Final-20260717-172211\04-restart-persistence.png` |
 
 控制台中的 409 是本 checkpoint 主动制造的病历号冲突；未出现未解释的业务运行异常。浏览器请求
 仍限定在 loopback 地址和内联资源。
@@ -188,14 +192,14 @@ specs/001-patient-management/contracts/openapi.yaml
 
 执行前自动化基线：后端 `63 passed`；前端 `63 passed`；Vite production build 成功。使用一位
 预置虚构病人，SQLite 路径为
-`C:\Users\lijie\AppData\Local\Temp\TestProj-T054-Final-20260717-173553\data\patient-management.sqlite3`。
+`%TEMP%\TestProj-T054-Final-20260717-173553\data\patient-management.sqlite3`。
 
 | 步骤 | 实际结果 | Pass/Fail | 证据/截图路径 |
 | --- | --- | --- | --- |
-| 删除确认与取消 | dialog 显示姓名、病历号、不可恢复后果和重复完整免责声明；初始焦点位于“取消”；取消后焦点恢复到删除按钮，网络记录中没有 DELETE | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T054-Final-20260717-173553\01-delete-confirm.png` |
-| 删除失败保护 | 打开确认 dialog 后停止后端，DELETE 经 Vite 代理返回 502；dialog 和病人信息保持，页面未提前移除病人，错误信息和两处免责声明可见；恢复后端后 API 仍有该病人 | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T054-Final-20260717-173553\02-delete-failure-protected.png` |
-| 删除成功 | 恢复后端后再次确认，DELETE 返回 204 且无响应体；成功响应后列表和详情才被移除，页面回到空状态 | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T054-Final-20260717-173553\03-delete-success.png` |
-| 重启后不恢复 | 后端 PID 从 44524 变为 60288；使用同一 SQLite 文件；重启后 API 返回 0 条，刷新浏览器仍为空状态且页面无 UUID | Pass | `C:\Users\lijie\AppData\Local\Temp\TestProj-T054-Final-20260717-173553\04-delete-restart-empty.png` |
+| 删除确认与取消 | dialog 显示姓名、病历号、不可恢复后果和重复完整免责声明；初始焦点位于“取消”；取消后焦点恢复到删除按钮，网络记录中没有 DELETE | Pass | `%TEMP%\TestProj-T054-Final-20260717-173553\01-delete-confirm.png` |
+| 删除失败保护 | 打开确认 dialog 后停止后端，DELETE 经 Vite 代理返回 502；dialog 和病人信息保持，页面未提前移除病人，错误信息和两处免责声明可见；恢复后端后 API 仍有该病人 | Pass | `%TEMP%\TestProj-T054-Final-20260717-173553\02-delete-failure-protected.png` |
+| 删除成功 | 恢复后端后再次确认，DELETE 返回 204 且无响应体；成功响应后列表和详情才被移除，页面回到空状态 | Pass | `%TEMP%\TestProj-T054-Final-20260717-173553\03-delete-success.png` |
+| 重启后不恢复 | 后端 PID 从 44524 变为 60288；使用同一 SQLite 文件；重启后 API 返回 0 条，刷新浏览器仍为空状态且页面无 UUID | Pass | `%TEMP%\TestProj-T054-Final-20260717-173553\04-delete-restart-empty.png` |
 
 控制台中的 502 是本 checkpoint 为验证删除失败保护而主动停止后端产生的预期结果；除此之外未出现
 未解释的业务运行异常。
@@ -204,10 +208,10 @@ specs/001-patient-management/contracts/openapi.yaml
 
 最终验收使用 `http://127.0.0.1:5173/`，FastAPI 绑定 `127.0.0.1:8000`，独立 SQLite
 文件为
-`C:\Users\lijie\AppData\Local\Temp\TestProj-T057-Final-20260717-174325\data\patient-management.sqlite3`。
+`%TEMP%\TestProj-T057-Final-20260717-174325\data\patient-management.sqlite3`。
 内置 Browser 因当前会话的浏览器运行时元数据不完整而无法初始化；经用户同意，真实浏览器步骤改用
 Chrome DevTools 执行。证据统一保存在
-`C:\Users\lijie\AppData\Local\Temp\TestProj-T057-Final-20260717-174325`。
+`%TEMP%\TestProj-T057-Final-20260717-174325`。
 
 | 步骤 | 操作 | 预期结果 | 实际结果 | Pass/Fail | 证据/截图路径 |
 | --- | --- | --- | --- | --- | --- |
@@ -253,10 +257,10 @@ Chrome DevTools 执行。证据统一保存在
 | --- | --- | --- | --- |
 | 纯空白字段 | 创建 dialog 保持打开，病历号和姓名分别显示“此字段为必填项”，无 POST | 本轮浏览器 a11y snapshot | Pass |
 | 未来出生日期与草稿保留 | 标准 `input/change` 事件写入 `2027-01-01` 后，显示“出生日期不得晚于今天”；病历号、姓名和日期草稿全部保留 | `10-future-date-validation.png` | Pass |
-| casefold 冲突与失败草稿 | 病历号仅大小写/首尾空白不同返回 409，编辑 dialog、全部输入和免责声明保持 | `C:\Users\lijie\AppData\Local\Temp\TestProj-T044-Final-20260717-172211\03-failure-draft-retained.png` | Pass |
+| casefold 冲突与失败草稿 | 病历号仅大小写/首尾空白不同返回 409，编辑 dialog、全部输入和免责声明保持 | `%TEMP%\TestProj-T044-Final-20260717-172211\03-failure-draft-retained.png` | Pass |
 | 搜索无结果 | 删除成功后当前搜索显示“未找到匹配的病人”，顶部免责声明仍可见 | `07-delete-success.png` | Pass |
 | 加载状态 | 已加载页面启用 Slow 3G 后提交搜索，显示“正在搜索病人…”且顶部免责声明持续可见 | `09-slow3g-loading.png` | Pass |
-| 操作失败 | 主动停止后端使删除返回 502；dialog、病人数据、错误信息和两处免责声明保持 | `C:\Users\lijie\AppData\Local\Temp\TestProj-T054-Final-20260717-173553\02-delete-failure-protected.png` | Pass |
+| 操作失败 | 主动停止后端使删除返回 502；dialog、病人数据、错误信息和两处免责声明保持 | `%TEMP%\TestProj-T054-Final-20260717-173553\02-delete-failure-protected.png` | Pass |
 | 全部页面状态与 dialog 的免责声明 | 病人列表、空列表、搜索结果、搜索无结果、加载/操作失败、详情及创建/编辑/删除 dialog 均显示完整文本“教学演示软件，不用于临床诊断” | T032、T044、T054 checkpoint 与本轮 `01`–`10` 截图 | Pass |
 | UUID 与网络边界 | 页面文本无 UUID；浏览器资源和 REST 请求仅访问 `127.0.0.1:5173`（由 Vite 代理到 `127.0.0.1:8000`），无非 loopback 请求 | Chrome DevTools DOM、Network、Performance entries | Pass |
 | 本地存储与禁止范围 | 运行数据只写入上述本地 SQLite；实现源码和依赖清单中未出现 DICOM、Cornerstone3D、PACS、DICOMweb、登录、认证、云服务、测量、报告或 3D 功能 | SQLite 实际路径与实现源码定向检索 | Pass |

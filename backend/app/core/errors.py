@@ -144,6 +144,15 @@ class PersistenceError(ApiError):
         )
 
 
+class ImportLimitExceededError(ApiError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=413,
+            code="import_limit_exceeded",
+            message="本次导入的数据量超过教学演示上限",
+        )
+
+
 def _validation_field(error: dict[str, Any]) -> str:
     location = error.get("loc", ())
     if not location:

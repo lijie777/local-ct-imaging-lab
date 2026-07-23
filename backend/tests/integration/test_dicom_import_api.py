@@ -4,8 +4,9 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
-from app.services.managed_storage import ManagedStorage, ManagedStorageError
+from app.services.managed_storage import ImportSession, ManagedStorage, ManagedStorageError
 from tests.dicom_factory import write_dicom_file
 
 
@@ -115,6 +116,149 @@ def test_import_initialization_failure_is_sanitized(
     assert response.json()["error"]["code"] == "persistence_error"
     assert "private" not in response.text.lower()
     assert "secret" not in response.text.lower()
+
+
+def test_import_rejects_too_many_files_with_sanitized_413(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    patient = _create_patient(client)
+    monkeypatch.setattr("app.api.dicom_import.MAX_IMPORT_FILE_COUNT", 1)
+
+    response = client.post(
+        f"/api/patients/{patient['id']}/dicom-import",
+        files=[
+            ("files", ("first.dcm", b"first", "application/dicom")),
+            ("files", ("second.dcm", b"second", "application/dicom")),
+        ],
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"] == {
+        "code": "import_limit_exceeded",
+        "message": "本次导入的数据量超过教学演示上限",
+        "field_errors": [],
+    }
+    assert "private" not in response.text.lower()
+
+
+def test_import_maps_multipart_parser_file_limit_to_413(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    patient = _create_patient(client)
+    monkeypatch.setattr("app.api.dicom_import.MAX_IMPORT_FILE_COUNT", 1_001)
+
+    response = client.post(
+        f"/api/patients/{patient['id']}/dicom-import",
+        files=[
+            ("files", (f"{index}.dcm", b"x", "application/dicom"))
+            for index in range(1_002)
+        ],
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "import_limit_exceeded"
+
+
+def test_import_accepts_file_count_at_configured_limit(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    patient = _create_patient(client)
+    monkeypatch.setattr("app.api.dicom_import.MAX_IMPORT_FILE_COUNT", 2)
+
+    response = client.post(
+        f"/api/patients/{patient['id']}/dicom-import",
+        files=[
+            ("files", ("first.dcm", b"first", "application/dicom")),
+            ("files", ("second.dcm", b"second", "application/dicom")),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+
+
+def test_import_rejects_file_larger_than_limit(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    patient = _create_patient(client)
+    monkeypatch.setattr("app.api.dicom_import.MAX_IMPORT_FILE_BYTES", 3)
+
+    response = client.post(
+        f"/api/patients/{patient['id']}/dicom-import",
+        files=[("files", ("large.dcm", b"four", "application/dicom"))],
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "import_limit_exceeded"
+
+
+def test_import_rejects_batch_larger_than_limit(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    patient = _create_patient(client)
+    monkeypatch.setattr("app.api.dicom_import.MAX_IMPORT_FILE_BYTES", 4)
+    monkeypatch.setattr("app.api.dicom_import.MAX_IMPORT_BATCH_BYTES", 5)
+
+    response = client.post(
+        f"/api/patients/{patient['id']}/dicom-import",
+        files=[
+            ("files", ("first.dcm", b"one", "application/dicom")),
+            ("files", ("second.dcm", b"two", "application/dicom")),
+        ],
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "import_limit_exceeded"
+
+
+def test_successful_report_is_preserved_when_import_session_cleanup_fails(
+    client: TestClient,
+    monkeypatch,
+    caplog,
+) -> None:
+    patient = _create_patient(client)
+
+    def fail_cleanup(_session: ImportSession) -> None:
+        raise OSError(r"D:\private\temporary cleanup failure")
+
+    monkeypatch.setattr(ImportSession, "cleanup", fail_cleanup)
+    response = client.post(
+        f"/api/patients/{patient['id']}/dicom-import",
+        files=[("files", ("invalid.dcm", b"not dicom", "application/dicom"))],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["skipped"] == 1
+    assert "private" not in caplog.text.lower()
+
+
+def test_upload_close_failure_does_not_override_report_or_session_cleanup(
+    client: TestClient,
+    managed_storage: ManagedStorage,
+    monkeypatch,
+    caplog,
+) -> None:
+    patient = _create_patient(client)
+
+    async def fail_close(_upload: StarletteUploadFile) -> None:
+        raise OSError(r"D:\private\temporary upload close failure")
+
+    monkeypatch.setattr(StarletteUploadFile, "close", fail_close)
+    response = client.post(
+        f"/api/patients/{patient['id']}/dicom-import",
+        files=[("files", ("invalid.dcm", b"not dicom", "application/dicom"))],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["skipped"] == 1
+    assert list(managed_storage.imports_dir.iterdir()) == []
+    assert "private" not in caplog.text.lower()
 
 
 def test_mixed_multipart_import_returns_five_category_report(

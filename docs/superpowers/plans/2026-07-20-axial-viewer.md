@@ -1,5 +1,7 @@
 # 本地 CT 轴位查看器 Implementation Plan
 
+> **状态说明（2026-07-23）：** 本文件是历史实施计划，保留未勾选项用于过程追溯；当前需求与完成状态以对应 `specs/*/spec.md` 和 `specs/*/tasks.md` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 从现有 Patient → Study → eligible Series 打开一个本机单视口轴位 CT 查看器，并支持切片浏览、窗宽窗位、平移、缩放、重置及稳定错误反馈。

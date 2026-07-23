@@ -13,12 +13,14 @@ DICOM 文件。不要将真实患者数据放入仓库、截图或日志。
 - 一套至少 50 个实例的已脱敏 CT 数据，PatientID 可与测试病历号匹配
 - 本机端口 `127.0.0.1:8000`、`127.0.0.1:5173` 可用
 
+以下当前命令均从仓库根目录开始执行。
+
 ## Install and migrate
 
 ```powershell
-Set-Location D:\work\TestAI\TestProj\backend
-uv sync
-$env:MEDICAL_CT_APP_DATA_DIR = 'D:\work\TestAI\TestProj\data'
+$env:MEDICAL_CT_APP_DATA_DIR = Join-Path (Get-Location) 'data'
+Set-Location backend
+uv sync --locked --group dev
 uv run alembic upgrade head
 ```
 
@@ -30,8 +32,8 @@ uv run alembic upgrade head
 ### Backend
 
 ```powershell
-Set-Location D:\work\TestAI\TestProj\backend
-uv run pytest
+Set-Location backend
+uv run python -m pytest -q -p no:cacheprovider
 ```
 
 必须覆盖：
@@ -47,7 +49,8 @@ uv run pytest
 ### Frontend
 
 ```powershell
-Set-Location D:\work\TestAI\TestProj\frontend
+Set-Location frontend
+npm ci
 npm test -- --run
 npm run build
 ```
@@ -65,15 +68,15 @@ npm run build
 ### Backend
 
 ```powershell
-Set-Location D:\work\TestAI\TestProj\backend
-$env:MEDICAL_CT_APP_DATA_DIR = 'D:\work\TestAI\TestProj\data'
+$env:MEDICAL_CT_APP_DATA_DIR = Join-Path (Get-Location) 'data'
+Set-Location backend
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 ### Frontend
 
 ```powershell
-Set-Location D:\work\TestAI\TestProj\frontend
+Set-Location frontend
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
@@ -92,13 +95,15 @@ npm run dev -- --host 127.0.0.1 --port 5173
 
 ## Browser acceptance record
 
+> 以下 evidence 路径是历史本机验收记录，使用 `%TEMP%` 表示当时的用户临时目录；证据文件不随仓库分发。
+
 ### US1 checkpoint（2026-07-20）
 
 - 浏览器路径：Chrome DevTools fallback，原因是 in-app Browser 初始化失败：
   `codex/sandbox-state-meta: missing field 'sandboxPolicy'`。
 - URL / viewport：`http://127.0.0.1:5173/`，1440 × 1000；前后端仅监听
   `127.0.0.1:5173` 与 `127.0.0.1:8000`。
-- 临时数据根：`C:\Users\lijie\AppData\Local\Temp\TestProj-002-US1-20260720`。
+- 临时数据根：`%TEMP%\TestProj-002-US1-20260720`。
 - Patient：`MR-DICOM-US1 / DICOM 验收病人`；初始检查数 0，导入 dialog 内重复显示完整免责声明。
 - Fixture：动态生成的 50 个已脱敏 CT 实例，同一 Study / Series；浏览器原生多文件输入显示已选择 50 个文件。
 - 首次导入报告：Total 50，Success 50，Duplicate 0，Skipped 0，Unsupported 0，Failed 0。
@@ -114,7 +119,7 @@ npm run dev -- --host 127.0.0.1 --port 5173
 ### US2 checkpoint（2026-07-20）
 
 - 浏览器：独立 Chrome DevTools context，`http://127.0.0.1:5173/`；数据根为
-  `C:\Users\lijie\AppData\Local\Temp\TestProj-002-US2-20260720`。
+  `%TEMP%\TestProj-002-US2-20260720`。
 - 首次批次：3 个有效 CT，报告 `3 success / 0 duplicate / 0 skipped / 0 unsupported / 0 failed`；
   对应数据库 `1 Study / 1 Series / 3 Instances`，受管文件 3 个。
 - 完全重复批次：同 3 个文件报告 `0 success / 3 duplicate / 0 skipped / 0 unsupported / 0 failed`；
@@ -152,8 +157,8 @@ npm run dev -- --host 127.0.0.1 --port 5173
 | Python / uv 版本 | Python 3.12.13 / uv 0.11.28 |
 | Node / npm 版本 | Node v24.15.0 / npm 11.12.1 |
 | 浏览器及 viewport | Chrome 150.0.7871.114，1440 × 1000；in-app Browser 失败后使用本机既有 `puppeteer-core` 隔离 Chrome |
-| SQLite 实际路径 | `C:\Users\lijie\AppData\Local\Temp\TestProj-002-Final-20260720\data\patient-management.sqlite3` |
-| 受管 DICOM 根目录 | `C:\Users\lijie\AppData\Local\Temp\TestProj-002-Final-20260720\data\dicom` |
+| SQLite 实际路径 | `%TEMP%\TestProj-002-Final-20260720\data\patient-management.sqlite3` |
+| 受管 DICOM 根目录 | `%TEMP%\TestProj-002-Final-20260720\data\dicom` |
 | 已脱敏 fixture 来源与实例数 | `backend/tests/dicom_factory.py` 动态生成；首次 50 个 CT，混合批次 5 个文件 |
 
 ### Complete acceptance path

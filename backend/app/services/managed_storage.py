@@ -58,7 +58,7 @@ class ManagedStorage:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.data_dir = settings.data_dir.resolve()
-        self.imports_dir = settings.imports_dir.resolve()
+        self.imports_dir = settings.imports_dir.absolute()
         self.dicom_dir = settings.dicom_dir.resolve()
         self.delete_staging_dir = settings.delete_staging_dir.absolute()
 
@@ -113,6 +113,83 @@ class ManagedStorage:
             ) from error
         return root
 
+    def _validate_imports_dir(self, *, create: bool) -> Path | None:
+        root = self.imports_dir
+        try:
+            root.lstat()
+        except FileNotFoundError:
+            if not create:
+                return None
+            try:
+                self._ensure_within(root, self.data_dir)
+                root.mkdir(parents=True, exist_ok=True)
+                root.lstat()
+            except UnsafeManagedPathError:
+                raise
+            except OSError as error:
+                raise ManagedStorageError(
+                    "Unable to create DICOM import staging directory"
+                ) from error
+        except OSError as error:
+            raise ManagedStorageError(
+                "Unable to validate DICOM import staging directory"
+            ) from error
+
+        try:
+            if root.is_symlink() or root.is_junction() or not root.is_dir():
+                raise UnsafeManagedPathError(
+                    "Unsafe DICOM import staging directory"
+                )
+            self._ensure_within(root, self.data_dir)
+        except UnsafeManagedPathError:
+            raise
+        except OSError as error:
+            raise ManagedStorageError(
+                "Unable to validate DICOM import staging directory"
+            ) from error
+        return root
+
+    def _validate_import_session_directory(
+        self,
+        session_path: Path,
+        root: Path | None,
+    ) -> Path | None:
+        try:
+            session_path.lstat()
+        except FileNotFoundError:
+            return None
+        except OSError as error:
+            raise ManagedStorageError(
+                "Unable to inspect DICOM import session directory"
+            ) from error
+
+        if root is None:
+            raise UnsafeManagedPathError(
+                "DICOM import session directory has no staging root"
+            )
+
+        try:
+            if (
+                session_path.is_symlink()
+                or session_path.is_junction()
+                or not session_path.is_dir()
+            ):
+                raise UnsafeManagedPathError(
+                    "Unsafe DICOM import session directory"
+                )
+            safe_path = self._ensure_within(session_path, root)
+            if safe_path == root.resolve():
+                raise UnsafeManagedPathError(
+                    "DICOM import session directory must be below staging root"
+                )
+        except UnsafeManagedPathError:
+            raise
+        except OSError as error:
+            raise ManagedStorageError(
+                "Unable to validate DICOM import session directory"
+            ) from error
+        return safe_path
+
     def _validate_staged_patient_directory(
         self,
         staged_path: Path,
@@ -155,9 +232,13 @@ class ManagedStorage:
         return safe_path
 
     def create_import_session(self) -> ImportSession:
-        self.imports_dir.mkdir(parents=True, exist_ok=True)
+        imports_root = self._validate_imports_dir(create=True)
+        if imports_root is None:
+            raise ManagedStorageError(
+                "Unable to create DICOM import staging directory"
+            )
         path = self._ensure_within(
-            self.imports_dir / str(uuid4()), self.imports_dir
+            imports_root / str(uuid4()), imports_root
         )
         path.mkdir()
         return ImportSession(path)
@@ -319,6 +400,39 @@ class ManagedStorage:
                 safe_directory = self._validate_staged_patient_directory(
                     entry,
                     staging_root,
+                )
+                if safe_directory is None:
+                    continue
+                shutil.rmtree(safe_directory)
+            except (ManagedStorageError, OSError):
+                failed += 1
+
+        return failed
+
+    def cleanup_pending_imports(self) -> int:
+        try:
+            imports_root = self._validate_imports_dir(create=False)
+        except ManagedStorageError:
+            return 1
+        if imports_root is None:
+            return 0
+
+        try:
+            entries = sorted(
+                imports_root.iterdir(),
+                key=lambda entry: entry.name,
+            )
+        except FileNotFoundError:
+            return 0
+        except OSError:
+            return 1
+
+        failed = 0
+        for entry in entries:
+            try:
+                safe_directory = self._validate_import_session_directory(
+                    entry,
+                    imports_root,
                 )
                 if safe_directory is None:
                     continue

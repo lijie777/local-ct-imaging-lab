@@ -21,22 +21,14 @@
 - **DICOM 导入与持久化**：导入本机文件或目录中的 CT DICOM，按 Study、Series、Instance 组织数据，逐文件报告成功、重复、跳过、不支持和失败，并把原始 DICOM 复制到本机受管目录。
 - **轴位查看**：对 `eligible` Series 显示轴位切片，支持切片浏览、窗宽窗位、平移、缩放和重置。
 - **三视图 MPR**：显示轴位、冠状位、矢状位三个 viewport，支持 Crosshairs 联动、共享窗宽窗位、独立平移/缩放、十字线显隐和完整重置。
-- **安全失败恢复**：对数据库写入失败、病人删除清理失败、本机 DICOM 缺失、后端暂时不可用和查看器构建失败提供受控回滚、隔离、重试或安全提示；启动时会重试清理病人删除隔离残留。
+- **安全失败恢复**：对数据库写入失败、病人删除清理失败、本机 DICOM 缺失、后端暂时不可用和查看器构建失败提供受控回滚、隔离、重试或安全提示；启动时会重试清理病人删除隔离残留和异常中断的导入临时目录。
 
 ## 系统架构与数据流
 
 ```text
-React / Vite / Cornerstone3D
-            |
-     http://127.0.0.1:5173
-            |
-       Vite /api proxy
-            |
-     http://127.0.0.1:8000
-            |
-          FastAPI
-        /         \
-    SQLite     Managed DICOM
+开发模式：Browser -> Vite :5173 -> /api proxy -> FastAPI :8000
+生产交付：Browser -> FastAPI :8000 -> frontend/dist + /api
+                                      -> SQLite + Managed DICOM
 ```
 
 前端开发服务器和后端 API 都只监听 loopback 地址。病人元数据、DICOM 文件和像素数据保留在本机；当前实现不向外部服务上传、同步或发送遥测。
@@ -63,10 +55,10 @@ React / Vite / Cornerstone3D
 - Windows 10/11 与 PowerShell。
 - Python 3.12。
 - `uv`。
-- Node.js 与 npm，版本需兼容当前 `package-lock.json`。
+- Node.js 24.15.x 与 npm 11.12.x；仓库根目录 `.node-version` 和 `frontend/package.json` 是版本约束。
 - 支持 WebGL 的 Chrome 或 Edge。
 
-## 快速启动
+## 开发模式快速启动
 
 在仓库根目录打开 PowerShell。后端和前端需要分别占用一个终端。
 
@@ -74,7 +66,7 @@ React / Vite / Cornerstone3D
 
 ```powershell
 cd backend
-uv sync --group dev
+uv sync --locked --group dev
 uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
@@ -85,11 +77,28 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 ```powershell
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
 浏览器访问 `http://127.0.0.1:5173`。
+
+## Production 单进程运行
+
+先构建前端，再启动后端；FastAPI 会从 `/` 同源提供 `frontend/dist`，因此运行时只需一个后端进程：
+
+```powershell
+cd frontend
+npm ci
+npm run build
+
+cd ../backend
+uv sync --locked --group dev
+uv run alembic upgrade head
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+浏览器访问 `http://127.0.0.1:8000`。如果尚未生成 `frontend/dist/index.html`，FastAPI 仍会以 API-only 模式启动，`/api`、`/docs` 和 `/openapi.json` 不受影响。
 
 ## 本机数据目录
 
@@ -109,7 +118,7 @@ data/
 $env:MEDICAL_CT_APP_DATA_DIR = Join-Path $env:TEMP 'local-ct-imaging-lab-data'
 ```
 
-`.imports/` 只用于当前导入操作的临时落盘，操作结束后清理。删除带有影像的病人时，系统先把该病人的受管 DICOM 目录移动到 `.delete-staging/`，再提交数据库删除，避免可访问数据库记录指向已删除文件；提交后的清理如果失败，剩余文件保持隔离，并在下次应用启动时逐项重试。
+`.imports/` 只用于当前导入操作的临时落盘，单文件上限 512 MiB、单批最多 2,000 个文件且总量不超过 8 GiB；操作结束后清理，异常残留会在下次应用启动时安全重试。删除带有影像的病人时，系统先把该病人的受管 DICOM 目录移动到 `.delete-staging/`，再提交数据库删除，避免可访问数据库记录指向已删除文件；提交后的清理如果失败，剩余文件保持隔离，并在下次应用启动时逐项重试。
 
 `.delete-staging/` 是 `ManagedStorage` 独占的内部目录：只有病人删除流程可以向其中创建暂存项。启动清理只检查其直接子目录，并拒绝符号链接、junction、普通文件或越出配置数据根目录的路径。不要手工向该目录放置文件、替换目录或把它用于其他数据；单项清理失败只记录安全 warning，不阻止其他项清理或本机服务启动。
 
@@ -142,6 +151,7 @@ npm run build
 ```
 
 `npm run build` 同时执行 TypeScript `tsc --noEmit` 检查和 Vite production build。
+`frontend/package.json` 还通过 `overrides` 固定已修复的 `adm-zip` 与 `uuid` 传递依赖版本；CI 会运行 `npm audit --audit-level=moderate`，避免后续锁文件重新引入已知中高风险版本。
 
 ## 文档导航
 
@@ -153,6 +163,7 @@ npm run build
 | 004 三视图 MPR | [spec](specs/004-three-view-mpr/spec.md) | [tasks](specs/004-three-view-mpr/tasks.md) | [quickstart](specs/004-three-view-mpr/quickstart.md) |
 
 - [项目宪章](.specify/memory/constitution.md)
+- [文档状态与导航](docs/README.md)
 - [总体设计](docs/superpowers/specs/2026-07-16-medical-ct-viewer-design.md)
 - [代码审查问题修复设计](docs/superpowers/specs/2026-07-21-code-review-fixes-design.md)
 
