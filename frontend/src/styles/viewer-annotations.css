@@ -1,0 +1,88 @@
+.measurement-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.75rem;
+  color: #24415f;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.65rem;
+}
+.measurement-toolbar__tools {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.measurement-toolbar__tools .button[aria-pressed='true'] {
+  color: #fff;
+  background: #245b8f;
+  border-color: #245b8f;
+}
+
+.measurement-toolbar__status {
+  display: grid;
+  gap: 0.25rem;
+  min-width: min(100%, 18rem);
+  font-size: 0.88rem;
+  text-align: right;
+}
+
+.measurement-toolbar__status span:first-child {
+  font-weight: 700;
+}
+
+.annotation-text-form,
+.annotation-text-form label,
+.clear-annotations-warning {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.annotation-text-form label {
+  font-weight: 700;
+}
+
+.annotation-text-form input {
+  width: 100%;
+  min-height: 2.7rem;
+  padding: 0.6rem 0.7rem;
+  color: #172033;
+  background: #fff;
+  border: 1px solid #9eafbf;
+  border-radius: 0.45rem;
+}
+
+.annotation-text-form input:focus-visible {
+  outline: 3px solid #8ab4e2;
+  outline-offset: 2px;
+}
+
+.annotation-text-form__hint,
+.clear-annotations-warning p {
+  margin: 0;
+}
+
+.annotation-text-form__hint {
+  color: #526078;
+  font-size: 0.88rem;
+}
+
+.clear-annotations-warning p:last-of-type {
+  color: #7b1d24;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .measurement-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .measurement-toolbar__status {
+    min-width: 0;
+    text-align: left;
+  }
+}

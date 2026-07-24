@@ -44,8 +44,9 @@
   educational demonstration and is not for clinical diagnosis.
 - **Local data boundary**: The feature remains offline, local-only, and single-user; no patient
   or DICOM data leaves the machine.
-- **Scope and stack**: The feature uses only the approved stack and does not introduce cloud
-  services, authentication, PACS, DICOMweb, diagnostic reports, measurements, or 3D rendering.
+- **Scope and stack**: The feature uses the approved stack, does not introduce cloud services,
+  authentication, PACS, DICOMweb, or diagnostic reports, and keeps measurements, persistence,
+  background import, and advanced 3D capabilities in separately specified and accepted features.
 - **Modularity and minimal change**: Responsibilities are independently testable, dependencies
   are minimally necessary, and unrelated refactoring is excluded.
 - **Verification**: Backend business rules have pytest coverage, frontend behavior has Vitest or

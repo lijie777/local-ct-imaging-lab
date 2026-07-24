@@ -144,12 +144,75 @@ class PersistenceError(ApiError):
         )
 
 
+class ViewerStateInvalidError(ApiError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=422,
+            code="viewer_state_invalid",
+            message="查看器状态无效",
+        )
+
+
 class ImportLimitExceededError(ApiError):
     def __init__(self) -> None:
         super().__init__(
             status_code=413,
             code="import_limit_exceeded",
             message="本次导入的数据量超过教学演示上限",
+        )
+
+
+class ImportJobNotFoundError(ApiError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=404,
+            code="import_job_not_found",
+            message="未找到该导入任务",
+        )
+
+
+class ImportJobConflictError(ApiError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="import_job_conflict",
+            message="该病人已有进行中的导入任务",
+        )
+
+
+class ImportJobStateConflictError(ApiError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="import_job_state_conflict",
+            message="当前导入任务状态不允许此操作",
+        )
+
+
+class ImportOffsetConflictError(ApiError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="import_offset_conflict",
+            message="上传位置与服务端确认位置不一致",
+        )
+
+
+class ImportFileMismatchError(ApiError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="import_file_mismatch",
+            message="所选文件与导入任务清单不匹配",
+        )
+
+
+class ImportInProgressError(ApiError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="import_in_progress",
+            message="该病人存在进行中的导入任务",
         )
 
 
@@ -187,7 +250,7 @@ async def api_error_handler(_request: Request, error: ApiError) -> JSONResponse:
 
 
 async def request_validation_error_handler(
-    _request: Request,
+    request: Request,
     error: RequestValidationError,
 ) -> JSONResponse:
     field_errors = [
@@ -198,10 +261,15 @@ async def request_validation_error_handler(
         )
         for item in error.errors()
     ]
+    viewer_state_write = (
+        request.method == "PUT"
+        and request.url.path.startswith("/api/series/")
+        and request.url.path.endswith("/viewer-state")
+    )
     response = ErrorResponse(
         error=ErrorDetail(
-            code="validation_error",
-            message="请求字段无效",
+            code="viewer_state_invalid" if viewer_state_write else "validation_error",
+            message="查看器状态无效" if viewer_state_write else "请求字段无效",
             field_errors=field_errors,
         )
     )

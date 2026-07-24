@@ -22,6 +22,7 @@ from app.models.common import utc_now_for_storage
 
 
 if TYPE_CHECKING:
+    from app.models.import_job import ImportJob
     from app.models.study import Study
 
 
@@ -69,6 +70,11 @@ class Patient(Base):
         default=utc_now_for_storage,
     )
     studies: Mapped[list[Study]] = relationship(
+        back_populates="patient",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    import_jobs: Mapped[list[ImportJob]] = relationship(
         back_populates="patient",
         cascade="all, delete-orphan",
         passive_deletes=True,

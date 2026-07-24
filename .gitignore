@@ -9,6 +9,7 @@ data/*.sqlite3-journal
 data/dicom/
 data/.imports/
 data/.delete-staging/
+data/.import-jobs/
 
 # Python environments, caches, and build outputs
 .venv/

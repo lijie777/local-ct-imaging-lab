@@ -25,6 +25,14 @@ vi.mock('../../mpr-viewer/pages/MprViewerPage', () => ({
     </section>
   ),
 }))
+vi.mock('../../advanced-3d-viewer/pages/Advanced3dViewerPage', () => ({
+  Advanced3dViewerPage: ({ onClose }: { onClose: () => void }) => (
+    <section>
+      <h1>CT 高级 3D</h1>
+      <button onClick={onClose} type="button">返回轴位查看器</button>
+    </section>
+  ),
+}))
 
 const context = {
   patient: { medical_record_no: 'MR-DICOM-001', name: 'Teaching' },
@@ -190,9 +198,34 @@ it('offers MPR for eligible multiple positions and recreates axial defaults afte
   render(<AxialViewerPage context={context} onClose={vi.fn()} />)
 
   expect(screen.getByRole('button', { name: '进入三视图' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '进入高级 3D' })).toBeEnabled()
   expect(axialViewportRender).toHaveBeenCalledTimes(1)
   await user.click(screen.getByRole('button', { name: '进入三视图' }))
   expect(screen.getByRole('heading', { name: 'CT 三视图' })).toBeVisible()
+
+  await user.click(screen.getByRole('button', { name: '返回轴位查看器' }))
+  expect(screen.getByRole('heading', { name: '轴位查看器' })).toBeVisible()
+  expect(screen.getByText('viewport 2')).toBeVisible()
+  expect(axialViewportRender).toHaveBeenCalledTimes(2)
+})
+
+it('opens advanced 3D independently and recreates axial viewing after returning', async () => {
+  axialViewportRender.mockClear()
+  vi.mocked(axialHook.useAxialSeries).mockReturnValue({
+    detail,
+    error: null,
+    imageIds: ['a', 'b'],
+    reload: vi.fn(),
+    status: 'success',
+  })
+  const user = userEvent.setup()
+  render(<AxialViewerPage context={context} onClose={vi.fn()} />)
+
+  expect(screen.getByRole('button', { name: '进入高级 3D' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '进入三视图' })).toBeEnabled()
+  await user.click(screen.getByRole('button', { name: '进入高级 3D' }))
+  expect(screen.getByRole('heading', { name: 'CT 高级 3D' })).toBeVisible()
+  expect(screen.queryByRole('heading', { name: 'CT 三视图' })).not.toBeInTheDocument()
 
   await user.click(screen.getByRole('button', { name: '返回轴位查看器' }))
   expect(screen.getByRole('heading', { name: '轴位查看器' })).toBeVisible()
@@ -214,6 +247,8 @@ it('keeps axial viewing usable and explains why a single-position series cannot 
   expect(screen.getByText('viewport 1')).toBeVisible()
   expect(screen.getByText('三视图暂不可用：至少需要两个不同空间位置的切片')).toBeVisible()
   expect(screen.getByRole('button', { name: '三视图暂不可用' })).toBeDisabled()
+  expect(screen.getByText('高级 3D 暂不可用：至少需要两个不同空间位置的切片')).toBeVisible()
+  expect(screen.getByRole('button', { name: '高级 3D 暂不可用' })).toBeDisabled()
 })
 
 it('keeps axial usable when multiple instances share one spatial position', () => {

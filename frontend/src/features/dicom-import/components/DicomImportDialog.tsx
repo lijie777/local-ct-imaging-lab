@@ -2,7 +2,7 @@ import { type ChangeEvent, type RefObject, useState } from 'react'
 
 import { ModalDialog } from '../../../components/ModalDialog'
 import type { Patient } from '../../patients/model/patient'
-import { importDicom } from '../api/dicomImportApi'
+import { useImportJob } from '../hooks/useImportJob'
 import type { ImportReport } from '../model/dicomImport'
 import { ImportReport as ImportReportView } from './ImportReport'
 
@@ -19,6 +19,13 @@ const DIRECTORY_INPUT_PROPS = {
   webkitdirectory: '',
 } as React.InputHTMLAttributes<HTMLInputElement> & { webkitdirectory: string }
 
+function formatBytes(value: number): string {
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KiB`
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MiB`
+}
+
 export function DicomImportDialog({
   onCancel,
   onImported,
@@ -27,15 +34,16 @@ export function DicomImportDialog({
   returnFocusRef,
 }: DicomImportDialogProps) {
   const [files, setFiles] = useState<File[]>([])
-  const [report, setReport] = useState<ImportReport | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [importing, setImporting] = useState(false)
   const [inputVersion, setInputVersion] = useState(0)
+  const importJob = useImportJob({
+    onImported,
+    open,
+    patientId: patient.id,
+  })
 
   function selectFiles(event: ChangeEvent<HTMLInputElement>) {
     setFiles(Array.from(event.currentTarget.files ?? []))
-    setReport(null)
-    setError(null)
+    importJob.clearError()
   }
 
   function clearSelection() {
@@ -44,46 +52,35 @@ export function DicomImportDialog({
   }
 
   function close() {
-    if (importing) {
-      return
-    }
     clearSelection()
-    setReport(null)
-    setError(null)
     onCancel()
   }
 
-  function beginNewImport() {
+  async function beginNewImport() {
+    if (importJob.job !== null && importJob.phase !== 'queued' && importJob.phase !== 'running') {
+      const discarded = await importJob.discard()
+      if (!discarded) {
+        return
+      }
+    }
     clearSelection()
-    setReport(null)
-    setError(null)
+    importJob.clearError()
   }
 
   async function submit() {
-    if (files.length === 0) {
-      setError('请选择至少一个 DICOM 文件或文件夹')
-      return
-    }
-
-    setImporting(true)
-    setError(null)
-    try {
-      const result = await importDicom(patient.id, files)
-      setReport(result)
-      if (result.failed === 0) {
-        clearSelection()
-      }
-      onImported(result)
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : '导入失败，请重试',
-      )
-    } finally {
-      setImporting(false)
-    }
+    await importJob.prepareAndUpload(files)
   }
+
+  const report = importJob.job?.report ?? null
+  const isActiveUpload = importJob.phase === 'uploading'
+  const isBackground = importJob.phase === 'queued' || importJob.phase === 'running'
+  const canDiscard =
+    importJob.job !== null &&
+    !isActiveUpload &&
+    !isBackground &&
+    importJob.phase !== 'loading' &&
+    importJob.phase !== 'completed' &&
+    importJob.phase !== 'failed'
 
   return (
     <ModalDialog
@@ -100,7 +97,7 @@ export function DicomImportDialog({
           选择 DICOM 文件
           <input
             accept=".dcm,application/dicom"
-            disabled={importing}
+            disabled={isActiveUpload || isBackground}
             key={`files-${inputVersion}`}
             multiple
             onChange={selectFiles}
@@ -111,7 +108,7 @@ export function DicomImportDialog({
           选择 DICOM 文件夹
           <input
             {...DIRECTORY_INPUT_PROPS}
-            disabled={importing}
+            disabled={isActiveUpload || isBackground}
             key={`directory-${inputVersion}`}
             multiple
             onChange={selectFiles}
@@ -121,18 +118,52 @@ export function DicomImportDialog({
         <p className="dicom-import-dialog__selection">
           已选择 {files.length} 个文件
         </p>
-        {error !== null ? (
+        {importJob.phase === 'loading' ? <p>正在恢复本机导入任务…</p> : null}
+        {importJob.phase === 'needs-selection' || importJob.phase === 'paused' ? (
+          <p role="status">
+            任务已保存。请重新选择同一批文件，系统会从服务端最后确认的位置继续上传。
+          </p>
+        ) : null}
+        {isActiveUpload && importJob.progress !== null ? (
+          <div
+            aria-label="上传进度"
+            aria-valuemax={importJob.progress.totalBytes}
+            aria-valuemin={0}
+            aria-valuenow={importJob.progress.uploadedBytes}
+            className="dicom-import-dialog__progress"
+            role="progressbar"
+          >
+            <strong>正在上传第 {importJob.progress.currentFile} / {importJob.progress.totalFiles} 个文件</strong>
+            <span>
+              {formatBytes(importJob.progress.uploadedBytes)} / {formatBytes(importJob.progress.totalBytes)}
+            </span>
+          </div>
+        ) : null}
+        {importJob.phase === 'queued' ? <p role="status">已入队，关闭窗口后仍会在后台继续处理。</p> : null}
+        {importJob.phase === 'running' ? <p role="status">后台正在处理 DICOM，关闭窗口不会取消任务。</p> : null}
+        {importJob.error !== null ? (
           <p className="form-alert" role="alert">
-            {error}
+            {importJob.error}
           </p>
         ) : null}
         {report !== null ? <ImportReportView report={report} /> : null}
+        {importJob.phase === 'failed' && importJob.job?.error_message !== null ? (
+          <p className="form-alert" role="alert">{importJob.job?.error_message}</p>
+        ) : null}
         <div className="dialog-actions">
-          {report !== null ? (
+          {canDiscard ? (
             <button
               className="button button--secondary"
-              disabled={importing}
-              onClick={beginNewImport}
+              onClick={() => void beginNewImport()}
+              type="button"
+            >
+              放弃任务
+            </button>
+          ) : null}
+          {(importJob.phase === 'completed' || importJob.phase === 'failed') ? (
+            <button
+              className="button button--secondary"
+              onClick={() => void beginNewImport()}
               type="button"
             >
               开始新导入
@@ -140,7 +171,6 @@ export function DicomImportDialog({
           ) : null}
           <button
             className="button button--secondary"
-            disabled={importing}
             onClick={close}
             type="button"
           >
@@ -148,11 +178,13 @@ export function DicomImportDialog({
           </button>
           <button
             className="button button--primary"
-            disabled={importing}
+            disabled={isActiveUpload || isBackground || importJob.phase === 'loading'}
             onClick={() => void submit()}
             type="button"
           >
-            {importing ? '正在导入…' : '开始导入'}
+            {importJob.phase === 'needs-selection' || importJob.phase === 'paused'
+              ? '继续上传'
+              : '开始导入'}
           </button>
         </div>
       </div>

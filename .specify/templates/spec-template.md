@@ -15,7 +15,9 @@
 - **Data boundary**: State how the feature remains local-only, offline, and single-user, and
   confirm that patient and DICOM data do not leave the machine.
 - **Scope boundary**: Confirm the feature does not add cloud services, authentication, PACS,
-  DICOMweb, diagnostic reports, image measurements, or 3D volume rendering.
+  DICOMweb, or diagnostic reports. Treat image measurements, viewer-state persistence,
+  background import, and advanced 3D capabilities as separate features with their own scope and
+  acceptance evidence.
 - **DICOM lifecycle, if applicable**: Define separate success, duplicate, skipped, unsupported,
   and failed outcomes plus database/managed-file consistency on failure and deletion.
 

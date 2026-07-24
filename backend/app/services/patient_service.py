@@ -7,12 +7,14 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
+    ImportInProgressError,
     MedicalRecordNumberConflictError,
     PatientNotFoundError,
     PersistenceError,
 )
 from app.models.common import utc_now_for_storage
 from app.models.patient import Patient
+from app.models.import_job import ImportJob
 from app.models.study import Study
 from app.schemas.patient import PatientCreate, PatientPatch, PatientRead
 from app.services.patient_validation import validate_patient_fields
@@ -200,6 +202,19 @@ def delete_patient(
         raise PersistenceError() from error
     if patient is None:
         raise PatientNotFoundError()
+
+    try:
+        active_import = session.scalar(
+            select(ImportJob.id).where(
+                ImportJob.patient_id == patient_id,
+                ImportJob.active_slot == 1,
+            )
+        )
+    except SQLAlchemyError as error:
+        session.rollback()
+        raise PersistenceError() from error
+    if active_import is not None:
+        raise ImportInProgressError()
 
     staged: StagedPatientDirectory | None = None
     try:

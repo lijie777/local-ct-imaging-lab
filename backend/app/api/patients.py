@@ -184,6 +184,10 @@ def update_patient_record(
             "model": ErrorResponse,
             "description": "Patient does not exist",
         },
+        409: {
+            "model": ErrorResponse,
+            "description": "Patient has an active import job",
+        },
         422: {
             "model": ErrorResponse,
             "description": "Request or field validation failed",

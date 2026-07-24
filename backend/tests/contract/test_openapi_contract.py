@@ -330,7 +330,10 @@ def test_runtime_delete_patient_contract(application: FastAPI) -> None:
     ]
 
     assert operation["operationId"] == "deletePatient"
-    assert set(operation["responses"]) == {"204", "404", "422", "500"}
+    assert set(operation["responses"]) == {"204", "404", "409", "422", "500"}
+    assert operation["responses"]["409"] == {
+        "$ref": "#/components/responses/ImportInProgress"
+    }
     assert operation["responses"]["204"] == {
         "description": "Patient permanently deleted; no response body"
     }
@@ -391,3 +394,66 @@ def test_runtime_error_responses_reference_contract_components(
         assert paths[path][method]["responses"][status] == {
             "$ref": f"#/components/responses/{component_name}"
         }
+
+
+def test_runtime_viewer_state_contract(application: FastAPI) -> None:
+    openapi = _runtime_openapi(application)
+    path_item = openapi["paths"]["/api/series/{series_id}/viewer-state"]
+
+    assert path_item["parameters"] == [
+        {"$ref": "#/components/parameters/SeriesId"}
+    ]
+    expected = {
+        "get": ("getViewerState", {"200", "404", "422", "500"}),
+        "put": ("putViewerState", {"200", "404", "422", "500"}),
+        "delete": ("deleteViewerState", {"204", "404", "422", "500"}),
+    }
+    for method, (operation_id, responses) in expected.items():
+        operation = path_item[method]
+        assert operation["operationId"] == operation_id
+        assert set(operation["responses"]) == responses
+
+    schemas = openapi["components"]["schemas"]
+    assert schemas["ViewerStateWrite"]["additionalProperties"] is False
+    assert set(schemas["ViewerStateWrite"]["required"]) == {
+        "schema_version",
+        "state",
+    }
+    assert schemas["ViewerStateWrite"]["properties"]["schema_version"]["const"] == 1
+    assert schemas["ViewerStatePayload"]["properties"]["annotations"]["maxItems"] == 500
+    assert "referenced_image_id" in schemas["PersistedAnnotation"]["required"]
+    assert schemas["PersistedAnnotation"]["properties"]["referenced_image_id"][
+        "maxLength"
+    ] == 2048
+
+
+def test_runtime_import_job_contract(application: FastAPI) -> None:
+    openapi = _runtime_openapi(application)
+    paths = openapi["paths"]
+    schemas = openapi["components"]["schemas"]
+    assert {
+        "/api/patients/{patient_id}/import-jobs",
+        "/api/patients/{patient_id}/import-jobs/latest",
+        "/api/import-jobs/{job_id}",
+        "/api/import-jobs/{job_id}/files/{file_id}/content",
+        "/api/import-jobs/{job_id}/queue",
+    }.issubset(paths)
+    assert paths["/api/patients/{patient_id}/import-jobs"]["post"][
+        "operationId"
+    ] == "createImportJob"
+    upload = paths["/api/import-jobs/{job_id}/files/{file_id}/content"]["put"]
+    assert upload["requestBody"]["content"]["application/octet-stream"]["schema"] == {
+        "type": "string",
+        "format": "binary",
+    }
+    assert "ImportJobRead" in schemas
+    assert "ImportUploadProgressRead" in schemas
+    error_codes = set(schemas["ErrorDetail"]["properties"]["code"]["enum"])
+    assert {
+        "import_job_not_found",
+        "import_job_conflict",
+        "import_job_state_conflict",
+        "import_offset_conflict",
+        "import_file_mismatch",
+        "import_in_progress",
+    }.issubset(error_codes)

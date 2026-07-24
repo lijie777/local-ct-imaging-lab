@@ -37,6 +37,7 @@ def test_frontend_dist_is_served_without_shadowing_api(
     assert root_response.status_code == 200
     assert "Local CT UI" in root_response.text
     assert asset_response.status_code == 200
+    assert asset_response.headers["content-type"].startswith("text/javascript")
     assert asset_response.text == "window.localCtLoaded = true"
     assert api_response.status_code == 200
     assert api_response.json() == []

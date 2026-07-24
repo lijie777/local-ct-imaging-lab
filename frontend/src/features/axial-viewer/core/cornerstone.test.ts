@@ -1,5 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
+type InstallViewerAnnotationToolsOptions = Parameters<
+  typeof import('../../viewer-annotations/core/annotationTools').installViewerAnnotationTools
+>[0]
+
 const mocks = vi.hoisted(() => {
   const eventListeners = new Map<string, Set<(event: Event) => void>>()
   const eventTarget = {
@@ -18,11 +22,24 @@ const mocks = vi.hoisted(() => {
   }
   const viewport = {
     getCurrentImageIdIndex: vi.fn(() => 1),
+    getProperties: vi.fn(() => ({
+      invert: false,
+      voiRange: { lower: -100, upper: 300 },
+    })),
+    getViewPresentation: vi.fn(() => ({
+      flipHorizontal: false,
+      flipVertical: false,
+      pan: [3, -2],
+      rotation: 5,
+      zoom: 1.5,
+    })),
     render: vi.fn(),
     resetCamera: vi.fn(),
     resetProperties: vi.fn(),
     setImageIdIndex: vi.fn(async () => ''),
+    setProperties: vi.fn(),
     setStack: vi.fn(async () => ''),
+    setViewPresentation: vi.fn(),
   }
   const renderingEngine = {
     destroy: vi.fn(),
@@ -35,6 +52,20 @@ const mocks = vi.hoisted(() => {
     addViewport: vi.fn(),
     setToolActive: vi.fn(),
     setToolPassive: vi.fn(),
+  }
+  const annotationController = {
+    activate: vi.fn(),
+    capture: vi.fn(() => [{
+      viewport: 'axial',
+      tool_name: 'Length',
+      referenced_image_id: 'a',
+      points: [[0, 0, 0], [1, 1, 0]],
+      label: null,
+      text_box: null,
+    }]),
+    clearAnnotations: vi.fn(),
+    destroy: vi.fn(),
+    restore: vi.fn(() => ({ restored: 1, skipped: 0 })),
   }
   return {
     addTool: vi.fn(),
@@ -50,14 +81,34 @@ const mocks = vi.hoisted(() => {
     toolGroup,
     toolsInit: vi.fn(),
     viewport,
+    annotationController,
+    installViewerAnnotationTools: vi.fn(
+      (_options: InstallViewerAnnotationToolsOptions) => annotationController,
+    ),
+    loadAndCacheImages: vi.fn((imageIds: string[]) =>
+      imageIds.map(() => Promise.resolve({})),
+    ),
   }
 })
+
+vi.mock('../../viewer-annotations/core/annotationTools', () => ({
+  ANNOTATION_TOOL_NAMES: {
+    angle: 'Angle',
+    arrowAnnotate: 'ArrowAnnotate',
+    eraseAnnotation: 'ScopedAnnotationEraser',
+    length: 'Length',
+    rectangleRoi: 'RectangleROI',
+  },
+  installViewerAnnotationTools: mocks.installViewerAnnotationTools,
+}))
 
 vi.mock('@cornerstonejs/core', () => ({
   Enums: {
     Events: {
       IMAGE_LOAD_ERROR: 'IMAGE_LOAD_ERROR',
+      CAMERA_MODIFIED: 'CAMERA_MODIFIED',
       STACK_NEW_IMAGE: 'CORNERSTONE_STACK_NEW_IMAGE',
+      VOI_MODIFIED: 'VOI_MODIFIED',
     },
     ViewportType: { STACK: 'stack' },
   },
@@ -69,6 +120,9 @@ vi.mock('@cornerstonejs/core', () => ({
     removeImageLoadObject: mocks.cacheRemoveImageLoadObject,
   },
   eventTarget: mocks.eventTarget,
+  imageLoader: {
+    loadAndCacheImages: mocks.loadAndCacheImages,
+  },
   init: mocks.coreInit,
 }))
 vi.mock('@cornerstonejs/dicom-image-loader', () => ({ init: mocks.loaderInit }))
@@ -204,6 +258,208 @@ it('registers stack and display tools with wheel plus one primary binding', asyn
     bindings: [{ mouseButton: 1 }],
   })
   expect(mocks.toolGroup.setToolPassive).toHaveBeenCalledWith('WindowLevel')
+})
+
+it('installs annotations, routes tools, clears, and resets without clearing', async () => {
+  const { createAxialViewportRuntime } = await import('./cornerstone')
+  const element = document.createElement('div')
+  const callbacks = {
+    onAnnotationCountChange: vi.fn(),
+    onCalibrationChange: vi.fn(),
+    onTextRequest: vi.fn(),
+  }
+  const runtime = await createAxialViewportRuntime(
+    element,
+    ['a', 'b', 'c'],
+    1,
+    vi.fn(),
+    vi.fn(),
+    undefined,
+    callbacks,
+  )
+
+  expect(mocks.installViewerAnnotationTools).toHaveBeenCalledWith(
+    expect.objectContaining({
+      callbacks: expect.objectContaining({
+        onAnnotationCountChange: callbacks.onAnnotationCountChange,
+        onCalibrationChange: expect.any(Function),
+        onTextRequest: callbacks.onTextRequest,
+      }),
+      elements: [element],
+      imageIds: ['a', 'b', 'c'],
+      toolGroup: mocks.toolGroup,
+    }),
+  )
+  expect(mocks.loadAndCacheImages).toHaveBeenCalledWith(['a', 'b', 'c'])
+  expect(mocks.loadAndCacheImages.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.installViewerAnnotationTools.mock.invocationCallOrder[0],
+  )
+
+  runtime.activateTool('length')
+  expect(mocks.annotationController.activate).toHaveBeenCalledWith('length')
+  for (const toolName of ['Pan', 'WindowLevel', 'Zoom']) {
+    expect(mocks.toolGroup.setToolPassive).toHaveBeenCalledWith(toolName)
+  }
+
+  runtime.activateTool('pan')
+  for (const toolName of [
+    'Angle',
+    'ArrowAnnotate',
+    'ScopedAnnotationEraser',
+    'Length',
+    'RectangleROI',
+  ]) {
+    expect(mocks.toolGroup.setToolPassive).toHaveBeenCalledWith(toolName, {
+      removeAllBindings: true,
+    })
+  }
+
+  runtime.clearAnnotations()
+  await runtime.reset()
+  expect(mocks.annotationController.clearAnnotations).toHaveBeenCalledOnce()
+  expect(mocks.toolGroup.setToolActive).toHaveBeenLastCalledWith('WindowLevel', {
+    bindings: [{ mouseButton: 1 }],
+  })
+  expect(mocks.annotationController.clearAnnotations).toHaveBeenCalledOnce()
+})
+
+it('captures public presentation, VOI, active tool, and safe annotations', async () => {
+  const { createAxialViewportRuntime } = await import('./cornerstone')
+  const element = document.createElement('div')
+  const runtime = await createAxialViewportRuntime(
+    element,
+    ['a', 'b', 'c'],
+    1,
+    vi.fn(),
+    vi.fn(),
+  )
+  runtime.activateTool('pan')
+
+  expect(runtime.captureState()).toEqual({
+    state: {
+      image_index: 1,
+      active_tool: 'pan',
+      presentation: {
+        zoom: 1.5,
+        pan: [3, -2],
+        rotation: 5,
+        flip_horizontal: false,
+        flip_vertical: false,
+      },
+      voi: { lower: -100, upper: 300, invert: false },
+    },
+    annotations: [expect.objectContaining({ tool_name: 'Length' })],
+  })
+  expect(mocks.annotationController.capture).toHaveBeenCalledWith({ axial: element })
+})
+
+it('applies bounded state in public API order and restores annotations', async () => {
+  const { createAxialViewportRuntime } = await import('./cornerstone')
+  const runtime = await createAxialViewportRuntime(
+    document.createElement('div'),
+    ['a', 'b', 'c'],
+    1,
+    vi.fn(),
+    vi.fn(),
+  )
+  mocks.viewport.setImageIdIndex.mockClear()
+  mocks.toolGroup.setToolActive.mockClear()
+
+  await expect(runtime.applyState({
+    image_index: 99,
+    active_tool: 'pan',
+    presentation: {
+      zoom: 2,
+      pan: [4, 5],
+      rotation: 10,
+      flip_horizontal: true,
+      flip_vertical: false,
+    },
+    voi: { lower: -200, upper: 200, invert: true },
+  }, [{
+    viewport: 'axial',
+    tool_name: 'Length',
+    referenced_image_id: 'a',
+    points: [[0, 0, 0], [1, 1, 0]],
+    label: null,
+    text_box: null,
+  }])).resolves.toEqual({ restored: 1, skipped: 0 })
+
+  expect(mocks.viewport.setImageIdIndex).toHaveBeenCalledWith(2)
+  expect(mocks.viewport.setViewPresentation).toHaveBeenCalledWith({
+    zoom: 2,
+    pan: [4, 5],
+    rotation: 10,
+    flipHorizontal: true,
+    flipVertical: false,
+  })
+  expect(mocks.viewport.setProperties).toHaveBeenCalledWith({
+    voiRange: { lower: -200, upper: 200 },
+    invert: true,
+  })
+  expect(mocks.annotationController.restore).toHaveBeenCalledOnce()
+  expect(mocks.toolGroup.setToolActive).toHaveBeenLastCalledWith('Pan', {
+    bindings: [{ mouseButton: 1 }],
+  })
+  expect(mocks.viewport.setViewPresentation.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.annotationController.restore.mock.invocationCallOrder[0],
+  )
+})
+
+it('falls back from geometry tools without calibration and emits changes after restore', async () => {
+  mocks.installViewerAnnotationTools.mockImplementationOnce(({ callbacks }) => {
+    callbacks.onCalibrationChange({ available: false, reason: 'missing spacing' })
+    return mocks.annotationController
+  })
+  const { createAxialViewportRuntime } = await import('./cornerstone')
+  const element = document.createElement('div')
+  const onStateChange = vi.fn()
+  const runtime = await createAxialViewportRuntime(
+    element,
+    ['a', 'b', 'c'],
+    1,
+    vi.fn(),
+    vi.fn(),
+    undefined,
+    undefined,
+    onStateChange,
+  )
+  onStateChange.mockClear()
+
+  await runtime.applyState({
+    image_index: 1,
+    active_tool: 'length',
+    presentation: null,
+    voi: null,
+  }, [])
+  expect(mocks.toolGroup.setToolActive).toHaveBeenLastCalledWith('WindowLevel', {
+    bindings: [{ mouseButton: 1 }],
+  })
+  expect(onStateChange).not.toHaveBeenCalled()
+
+  element.dispatchEvent(new Event('CAMERA_MODIFIED'))
+  expect(onStateChange).toHaveBeenCalledOnce()
+})
+
+it('destroys the annotation controller before the tool group and engine', async () => {
+  const { createAxialViewportRuntime } = await import('./cornerstone')
+  const runtime = await createAxialViewportRuntime(
+    document.createElement('div'),
+    ['a'],
+    0,
+    vi.fn(),
+    vi.fn(),
+  )
+
+  runtime.destroy()
+
+  expect(mocks.annotationController.destroy).toHaveBeenCalledOnce()
+  expect(mocks.annotationController.destroy.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.destroyToolGroup.mock.invocationCallOrder[0],
+  )
+  expect(mocks.destroyToolGroup.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.renderingEngine.destroy.mock.invocationCallOrder[0],
+  )
 })
 
 it('resizes the rendering engine through the viewport runtime', async () => {

@@ -22,3 +22,5 @@ from app.models import patient as _patient  # noqa: E402,F401
 from app.models import study as _study  # noqa: E402,F401
 from app.models import series as _series  # noqa: E402,F401
 from app.models import instance as _instance  # noqa: E402,F401
+from app.models import viewer_state as _viewer_state  # noqa: E402,F401
+from app.models import import_job as _import_job  # noqa: E402,F401

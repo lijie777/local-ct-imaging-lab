@@ -1,0 +1,41 @@
+.viewer-state-status {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  color: #24415f;
+  background: #f7fbff;
+  border: 1px solid #b9d3ea;
+  border-radius: 0.65rem;
+}
+
+.viewer-state-status:focus-visible {
+  outline: 3px solid #f2c75c;
+  outline-offset: 2px;
+}
+
+.viewer-state-status--error {
+  color: #7b1d24;
+  background: #fff0f1;
+  border-color: #e5aeb2;
+}
+
+.viewer-state-status__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 48rem) {
+  .viewer-state-status {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .viewer-state-status__actions .button {
+    width: 100%;
+  }
+}

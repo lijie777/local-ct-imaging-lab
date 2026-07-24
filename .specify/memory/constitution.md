@@ -1,20 +1,19 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 -> 1.0.1
-- Project title: 本地医疗 CT 病人管理与三视图预览系统 -> 本地 CT 影像教学平台
-- Modified principles: None
+- Version change: 1.0.1 -> 2.0.0
+- Modified principles: III. 第一版范围与技术栈锁定 -> III. 技术栈与受控功能扩展
 - Added sections: None
 - Removed sections: None
 - Templates and guidance:
-  - ✅ reviewed: .specify/templates/plan-template.md (no update required)
-  - ✅ reviewed: .specify/templates/spec-template.md (no update required)
+  - ✅ updated: .specify/templates/plan-template.md
+  - ✅ updated: .specify/templates/spec-template.md
   - ✅ reviewed: .specify/templates/tasks-template.md (no update required)
   - ✅ reviewed: .specify/templates/constitution-template.md (no update required)
   - ✅ reviewed: .agents/skills/speckit-*/SKILL.md (no update required)
 - Documentation:
-  - ✅ updated: README.md
-  - ✅ updated: docs/superpowers/specs/2026-07-22-project-renaming-design.md
-  - ✅ updated: docs/superpowers/plans/2026-07-22-project-renaming.md
+  - ✅ updated: README.md and README.en.md
+  - ✅ reviewed: docs/superpowers/specs/2026-07-23-measurement-annotation-design.md
+  - ✅ reviewed: docs/superpowers/plans/2026-07-23-measurement-annotation.md
 - Follow-up TODOs: None
 -->
 
@@ -36,13 +35,15 @@ DICOM 元数据、像素数据、日志和受管文件 MUST 保留在本机，�
 服务。第一版不得以“为未来准备”为理由引入账户、角色、登录认证、远程遥测或云端配置。
 任何会使医疗数据离开本机的数据流均视为宪章违规。
 
-### III. 第一版范围与技术栈锁定
+### III. 技术栈与受控功能扩展
 
 产品代码 MUST 使用 React、TypeScript、Vite、Cornerstone3D、FastAPI、pydicom、
-SQLAlchemy 和 SQLite。后端测试 MUST 使用 pytest；前端测试 MUST 使用 Vitest 或
-React Testing Library。第一版 MUST NOT 加入云服务、登录认证、PACS、DICOMweb、
-诊断报告、影像测量或三维体绘制。超出这些边界的需求必须先通过宪章修订，不得在普通功能
-计划中顺带引入。固定范围用于保证教学项目能够被完整实现、理解和验收。
+SQLAlchemy 和 SQLite；只有现有技术栈不能安全、可维护地实现已批准需求时，才可在计划中
+论证新增依赖。后端测试 MUST 使用 pytest；前端测试 MUST 使用 Vitest 或 React Testing
+Library。影像测量与标注、查看器状态持久化、后台导入与断点续传、3D 体绘制、表面重建和
+MIP 只能作为独立 Feature，经规格、计划、任务和端到端验收后加入。系统 MUST NOT 加入云
+服务、登录认证、PACS、DICOMweb 或诊断报告。受控扩展用于让教学平台逐步增加影像能力，
+同时保持每项功能可理解、可测试且不越过非临床边界。
 
 ### IV. 小模块、明确职责与最小改动
 
@@ -71,8 +72,9 @@ DICOM 导入 MUST 逐文件处理并明确报告五类结果：成功、重复�
 - 运行形态 MUST 为本机浏览器界面连接本机 FastAPI 服务；第一版不得依赖外网可用性。
 - SQLite MUST 保存结构化元数据和受管文件路径；DICOM 像素数据 MUST 保存在本地受管目录。
 - 新增依赖必须在实现计划中说明不可由现有技术栈完成的具体原因；仅为便利或未来扩展不得新增。
-- 任何功能规格 MUST 明确列出第一版排除项，并确认未引入认证、云、PACS、DICOMweb、
-  诊断报告、影像测量或三维体绘制。
+- 任何功能规格 MUST 明确列出当前 Feature 的排除项，并确认未引入认证、云、PACS、
+  DICOMweb 或诊断报告；影像测量、持久化、后台导入和高级三维能力 MUST 分别规划、实现和
+  验收，不得在无关 Feature 中顺带引入。
 - 涉及 DICOM 导入或病人删除的功能 MUST 定义失败恢复、部分成功和数据库/文件一致性规则。
 
 ## 开发流程与质量门禁
@@ -95,4 +97,4 @@ DICOM 导入 MUST 逐文件处理并明确报告五类结果：成功、重复�
 以及被拒绝的更简单方案；宪章中的 MUST 不得仅靠“复杂度说明”豁免。若需求与宪章冲突，必须先
 修订宪章并完成同步影响检查，再开始实现。
 
-**Version**: 1.0.1 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-22
+**Version**: 2.0.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-23

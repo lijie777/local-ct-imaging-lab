@@ -362,6 +362,20 @@
   color: #526078;
 }
 
+.dicom-import-dialog__progress {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  color: #24415f;
+  background: #edf3f8;
+  border-radius: 0.5rem;
+}
+
+.dicom-import-dialog__progress span {
+  color: #526078;
+  font-variant-numeric: tabular-nums;
+}
+
 .study-list-section {
   display: grid;
   gap: 1rem;

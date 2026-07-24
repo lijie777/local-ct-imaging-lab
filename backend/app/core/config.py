@@ -23,6 +23,7 @@ class Settings:
     imports_dir: Path
     dicom_dir: Path
     delete_staging_dir: Path
+    import_jobs_dir: Path
 
 
 def load_settings(
@@ -45,6 +46,7 @@ def load_settings(
             imports_dir=data_dir / ".imports",
             dicom_dir=data_dir / "dicom",
             delete_staging_dir=data_dir / ".delete-staging",
+            import_jobs_dir=data_dir / ".import-jobs",
         )
 
     database_path = data_dir / DATABASE_FILENAME
@@ -55,4 +57,5 @@ def load_settings(
         imports_dir=data_dir / ".imports",
         dicom_dir=data_dir / "dicom",
         delete_staging_dir=data_dir / ".delete-staging",
+        import_jobs_dir=data_dir / ".import-jobs",
     )

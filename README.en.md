@@ -4,17 +4,17 @@
 
 > Educational demonstration software. Not for clinical diagnosis.
 
-This is a single-user medical CT education project that runs entirely on the local machine. It demonstrates the complete data flow from patient record management, DICOM import, and local persistence to axial viewing and synchronized three-view MPR. It does not provide clinical diagnosis, treatment decisions, or public-network services.
+This is a single-user medical CT education project that runs entirely on the local machine. It demonstrates the complete data flow from patient record management, DICOM import and local persistence to background resumable upload, axial viewing, synchronized three-view MPR, measurements, annotations, viewer-state recovery, and advanced 3D visualization. It does not provide clinical diagnosis, treatment decisions, or public-network services.
 
 ## Background and Purpose
 
-Medical imaging education needs to handle structured patient information, the DICOM file lifecycle, two-dimensional viewing tools, and spatial synchronization. This project uses a phased Spec Kit workflow to split patient management, DICOM import, axial viewing, and three-view MPR into independently specified, implemented, and accepted features.
+Medical imaging education needs to handle structured patient information, the DICOM file lifecycle, two-dimensional viewing tools, spatial synchronization, safe non-clinical measurements, recoverable viewing context, and local 3D visualization. This project uses a phased Spec Kit workflow to split patient management, DICOM import, axial viewing, three-view MPR, measurement/annotation, viewer-state persistence, background resumable import, and advanced 3D visualization into independently specified, implemented, and accepted features.
 
 The main purposes are:
 
 - Demonstrate the complete local DICOM data flow from import and indexing to managed storage and browser display.
 - Validate data consistency and safe-failure behavior between SQLite metadata and managed DICOM files.
-- Provide an educational example of axial browsing and synchronized axial, coronal, and sagittal MPR views.
+- Provide educational examples of axial browsing, synchronized axial/coronal/sagittal MPR, volume rendering, MIP, and true surface reconstruction.
 - Reduce the risk of mishandling patient data and image files within a local, single-user boundary through automated testing and phased acceptance.
 
 ## Completed Features
@@ -23,6 +23,10 @@ The main purposes are:
 - **DICOM import and persistence**: Import local CT DICOM files or directories, organize data by Study, Series, and Instance, report success, duplicate, skipped, unsupported, and failed files individually, and copy original DICOM files into local managed storage.
 - **Axial viewing**: Display axial slices for `eligible` Series, with slice browsing, window width/level, pan, zoom, and reset.
 - **Three-view MPR**: Display axial, coronal, and sagittal viewports with synchronized Crosshairs, shared window width/level, independent pan/zoom, crosshair visibility control, and full reset.
+- **Measurements and annotations**: Axial and all three MPR viewports support length, angle, rectangular ROI, arrow text, single-item deletion, and confirmed clearing. Geometry tools are disabled without reliable Pixel Spacing, and clearing never removes Crosshairs.
+- **Viewer-state persistence**: Per-Series SQLite state stores axial/MPR slices, tools, grayscale, cameras, Crosshairs, and the four allowed annotation types. Annotations are bound to image identities from the current Series, coronal and sagittal annotations restore to their matching orientation, and only annotations whose images disappeared are skipped. It supports 500 ms coalesced writes, recovery after viewer exit, reload, or service restart, whole-snapshot rejection on limits, save retry, and deletion of saved state on reset.
+- **Background import and resumable upload**: Persist a manifest first, then upload sequential 4 MiB chunks from the server-confirmed offset. Job state, five-category import reports, and staging survive refreshes and service restarts; a single FastAPI-process worker continues after the dialog closes, and active jobs block Patient deletion. Resumption is limited to reselecting the same files on the same machine; cross-device resumption and parallel workers are not supported.
+- **Advanced 3D visualization**: Enter from a spatially eligible CT axial page and reuse one local volume load. It provides bone/soft-tissue/lung volume presets, MIP with six standard directions and physical slab thickness, and true surface reconstruction from the actual HU threshold. Surface processing runs entirely in the local browser; data above 4,000,000 sample points is automatically downsampled while preserving physical extent and direction. Every mode keeps the non-clinical notice visible, and 3D session state is not persisted.
 - **Safe-failure recovery**: Controlled rollback, isolation, retry, or safe messaging for database write failures, patient deletion cleanup failures, missing local DICOM files, temporary backend unavailability, and viewer build failures. On startup, the application retries cleanup of isolated patient-deletion remnants and interrupted import temporary directories.
 
 ## System Architecture and Data Flow
@@ -38,7 +42,7 @@ The frontend development server and backend API listen only on loopback addresse
 ## Technology Stack
 
 - Backend: Python 3.12, FastAPI, SQLAlchemy, Alembic, pydicom, SQLite, and pytest.
-- Frontend: React 19, TypeScript, Vite, Vitest, Testing Library, and Cornerstone3D 5.6.8.
+- Frontend: React 19, TypeScript, Vite, Vitest, Testing Library, Cornerstone3D 5.6.8, and vtk.js 36.4.1.
 - Specifications and process: GitHub Spec Kit project structure and in-repository Superpowers design/implementation documents.
 
 ## Repository Structure
@@ -46,8 +50,8 @@ The frontend development server and backend API listen only on loopback addresse
 | Directory | Purpose |
 | --- | --- |
 | `backend/` | FastAPI APIs, SQLAlchemy models, Alembic migrations, DICOM parsing/import, managed storage, and backend tests. |
-| `frontend/` | React pages, patient/DICOM/axial/MPR features, the Cornerstone3D runtime, and frontend tests. |
-| `specs/` | `spec.md`, `tasks.md`, `quickstart.md`, and related design artifacts for four phased features. |
+| `frontend/` | React pages; patient/DICOM/axial/MPR/viewer-state/advanced-3D features; Cornerstone3D and vtk.js runtimes; and frontend tests. |
+| `specs/` | `spec.md`, `plan.md`, `tasks.md`, `quickstart.md`, and related design artifacts for eight implemented features. |
 | `docs/` | Overall design, feature designs, code-review remediation, and implementation plans. |
 | `.specify/` | Spec Kit constitution, templates, scripts, workflow, and current feature metadata. |
 | `data/` | Default local runtime data directory containing SQLite, managed DICOM, and internal temporary/isolation directories; it must not be committed. |
@@ -58,7 +62,7 @@ The frontend development server and backend API listen only on loopback addresse
 - Python 3.12.
 - `uv`.
 - Node.js 24.15.x and npm 11.12.x; the root `.node-version` and `frontend/package.json` define the version constraints.
-- Chrome or Edge with WebGL support.
+- A modern Chrome or Edge browser with WebGL support; advanced 3D processing uses local browser CPU/GPU and memory.
 
 ## Development Quick Start
 
@@ -108,9 +112,10 @@ The default data root is `data/` under the repository root:
 
 ```text
 data/
-├── patient-management.sqlite3  # Patient, Study, Series, and Instance metadata
+├── patient-management.sqlite3  # Patient, Study, Series, Instance, and viewer state
 ├── dicom/                      # Managed original files organized by patient and DICOM UID
-├── .imports/                   # Internal temporary directory for one upload operation
+├── .imports/                   # Internal temporary directory for synchronous imports
+├── .import-jobs/               # Resumable staging for background import jobs
 └── .delete-staging/            # Internal isolation directory used during patient deletion
 ```
 
@@ -120,7 +125,7 @@ To use a separate local data directory, set the variable in the same backend ter
 $env:MEDICAL_CT_APP_DATA_DIR = Join-Path $env:TEMP 'local-ct-imaging-lab-data'
 ```
 
-`.imports/` is used only for temporary storage during the current import operation. Each file is limited to 512 MiB, each batch to 2,000 files, and the total batch size to 8 GiB. It is cleaned after the operation, and remnants from interruptions are safely retried at the next application startup. When deleting a patient with images, the system first moves that patient's managed DICOM directory to `.delete-staging/` and then commits the database deletion, preventing accessible database records from pointing to deleted files. If cleanup after commit fails, the remaining files stay isolated and are retried individually at the next startup.
+`.imports/` is used only for the existing synchronous import flow. `.import-jobs/` stores durable chunks for background jobs; each file is limited to 512 MiB, each batch to 2,000 files, and the total batch size to 8 GiB. Staging is cleaned after completion, failure, or discard, and interruption remnants are safely retried at the next application startup. When deleting a patient with images, the system first moves that patient's managed DICOM directory to `.delete-staging/` and then commits the database deletion, preventing accessible database records from pointing to deleted files. If cleanup after commit fails, the remaining files stay isolated and are retried individually at the next startup.
 
 `.delete-staging/` is an internal directory exclusively owned by `ManagedStorage`: only the patient-deletion flow may create staging items there. Startup cleanup examines only direct child directories and rejects symbolic links, junctions, regular files, or paths outside the configured data root. Do not manually add or replace items in this directory or use it for other data. Failure to clean one item records a safe warning but does not prevent other items from being cleaned or the local service from starting.
 
@@ -129,11 +134,13 @@ Import only de-identified educational CT data, and do not enter real patient inf
 ## Basic Usage Flow
 
 1. Create a fictional patient whose medical record number matches the DICOM `PatientID` of the de-identified CT data to import.
-2. Select de-identified CT DICOM files or a directory under the current patient and start the import.
-3. Review the per-file report and confirm successful, duplicate, skipped, unsupported, and failed items.
+2. Select de-identified CT DICOM files or a directory under the current patient and start the background import; after a refresh or dialog close, select the same files again to resume from the confirmed offset.
+3. Wait for the background job to finish, then review the per-file report and confirm successful, duplicate, skipped, unsupported, and failed items.
 4. Open the axial viewer for an `eligible` Series from the study and series list.
-5. Browse slices and use window width/level, pan, zoom, and reset tools.
-6. Open three-view MPR for an eligible multi-slice Series and use synchronized positioning and viewing tools.
+5. Browse slices and use window width/level, pan, zoom, measurement, arrow annotation, and reset tools.
+6. Open three-view MPR for an eligible multi-slice Series and use synchronized positioning, viewing, measurement, and annotation tools.
+7. Leave, reload, or restart the local service and reopen the same Series to verify recovery of axial/MPR state, Crosshairs, and all four annotation types.
+8. Use reset to restore defaults and delete saved state for that Series; use the confirmed “Clear all” action when only annotations should be removed.
 
 ## Tests and Production Build
 
@@ -163,11 +170,18 @@ npm run build
 | 002 DICOM Import | [spec](specs/002-dicom-import/spec.md) | [tasks](specs/002-dicom-import/tasks.md) | [quickstart](specs/002-dicom-import/quickstart.md) |
 | 003 Axial Viewer | [spec](specs/003-axial-viewer/spec.md) | [tasks](specs/003-axial-viewer/tasks.md) | [quickstart](specs/003-axial-viewer/quickstart.md) |
 | 004 Three-View MPR | [spec](specs/004-three-view-mpr/spec.md) | [tasks](specs/004-three-view-mpr/tasks.md) | [quickstart](specs/004-three-view-mpr/quickstart.md) |
+| 005 Measurement and Annotation | [spec](specs/005-measurement-annotation/spec.md) | [tasks](specs/005-measurement-annotation/tasks.md) | [quickstart](specs/005-measurement-annotation/quickstart.md) |
+| 006 Viewer-State Persistence | [spec](specs/006-viewer-state-persistence/spec.md) | [tasks](specs/006-viewer-state-persistence/tasks.md) | [quickstart](specs/006-viewer-state-persistence/quickstart.md) |
+| 007 Background Import and Resume | [spec](specs/007-background-import-resume/spec.md) | [tasks](specs/007-background-import-resume/tasks.md) | [quickstart](specs/007-background-import-resume/quickstart.md) |
+| 008 Advanced 3D Visualization | [spec](specs/008-advanced-3d-visualization/spec.md) | [tasks](specs/008-advanced-3d-visualization/tasks.md) | [quickstart](specs/008-advanced-3d-visualization/quickstart.md) |
 
 - [Project constitution](.specify/memory/constitution.md)
 - [Documentation status and navigation](docs/README.md)
 - [Overall design](docs/superpowers/specs/2026-07-16-medical-ct-viewer-design.md)
 - [Code-review remediation design](docs/superpowers/specs/2026-07-21-code-review-fixes-design.md)
+- [Measurement and annotation design](docs/superpowers/specs/2026-07-23-measurement-annotation-design.md)
+- [Viewer-state persistence design](docs/superpowers/specs/2026-07-23-viewer-state-persistence-design.md)
+- [Advanced 3D visualization design](docs/superpowers/specs/2026-07-23-advanced-3d-visualization-design.md)
 
 ## Current Limitations and Explicit Exclusions
 
@@ -176,11 +190,11 @@ The current version does not provide:
 - PACS, Orthanc, DICOMweb, HIS, RIS, or integration with other external medical systems.
 - Login, accounts, authentication, roles, permissions, or multi-user concurrency.
 - Cloud services, remote access, external backup, cross-device synchronization, or telemetry.
-- Length, angle, or area measurements; annotations, segmentation, or diagnostic reports.
-- 3D volume rendering, surface reconstruction, MIP, or surgical planning.
+- Segmentation, automated lesion detection, diagnostic reports, or diagnostic recommendations.
+- Surgical planning, 3D measurements, mesh export, surface editing, or cross-Series registration.
 - Clinical diagnosis, treatment decisions, medical-device registration, regulatory certification, or any other clinical use.
-- Viewer-state persistence, bookmarks, recently viewed lists, or deep links.
-- Background import queues, resumable uploads, cross-device import, or remote directory scanning.
+- Bookmarks, recently viewed lists, deep links, screenshots, reports, or cross-device viewer-state synchronization.
+- Cross-device import, remote directory scanning, parallel workers, or cross-device resumable uploads.
 
 ## Known Non-Blocking Warnings
 

@@ -1,3 +1,23 @@
+import {
+  ANNOTATION_TOOL_NAMES,
+  installViewerAnnotationTools,
+  type ViewerAnnotationController,
+} from '../../viewer-annotations/core/annotationTools'
+import {
+  GEOMETRY_MEASUREMENT_TOOLS,
+  isViewerAnnotationTool,
+  type ViewerAnnotationCallbacks,
+} from '../../viewer-annotations/model/viewerAnnotation'
+import type { AxialTool, ViewerTool } from '../model/axialViewer'
+import type {
+  AnnotationRestoreResult,
+} from '../../viewer-state/core/annotationPersistence'
+import type {
+  AxialViewerState,
+  PersistedViewerAnnotation,
+} from '../../viewer-state/model/viewerState'
+
+
 export interface CornerstoneModules {
   core: typeof import('@cornerstonejs/core')
   loader: typeof import('@cornerstonejs/dicom-image-loader')
@@ -5,7 +25,16 @@ export interface CornerstoneModules {
 }
 
 export interface AxialViewportRuntime {
-  activateTool(tool: import('../model/axialViewer').ViewerTool): void
+  activateTool(tool: AxialTool): void
+  applyState(
+    state: AxialViewerState,
+    annotations: readonly PersistedViewerAnnotation[],
+  ): Promise<AnnotationRestoreResult>
+  captureState(): {
+    state: AxialViewerState
+    annotations: PersistedViewerAnnotation[]
+  }
+  clearAnnotations(): void
   destroy(): void
   next(): Promise<void>
   previous(): Promise<void>
@@ -18,6 +47,12 @@ let initialization: Promise<CornerstoneModules> | null = null
 let runtimeSequence = 0
 const registeredTools = new Set<string>()
 const activeDicomRequests = new Map<string, Set<XMLHttpRequest>>()
+
+const NOOP_ANNOTATION_CALLBACKS: ViewerAnnotationCallbacks = {
+  onAnnotationCountChange: () => undefined,
+  onCalibrationChange: () => undefined,
+  onTextRequest: () => undefined,
+}
 
 
 function workerCount(): number {
@@ -121,6 +156,8 @@ export async function createAxialViewportRuntime(
   onIndexChange: (index: number) => void,
   onError: (message: string) => void,
   signal?: AbortSignal,
+  annotationCallbacks: ViewerAnnotationCallbacks = NOOP_ANNOTATION_CALLBACKS,
+  onStateChange: () => void = () => undefined,
 ): Promise<AxialViewportRuntime> {
   const { core, tools } = await initializeCornerstone()
   if (signal?.aborted) {
@@ -136,7 +173,17 @@ export async function createAxialViewportRuntime(
   let listenersAttached = false
   let cancelled = false
   let destroyed = false
+  let annotationController: ViewerAnnotationController | null = null
+  let activeTool: AxialTool = 'windowLevel'
+  let calibrationAvailable = false
+  let restoring = false
   const failedImageIds = new Set<string>()
+
+  function notifyStateChange(): void {
+    if (!destroyed && !restoring) {
+      onStateChange()
+    }
+  }
 
   const handleNewImage = (event: Event) => {
     const detail = (
@@ -147,6 +194,7 @@ export async function createAxialViewportRuntime(
     }
     if (!destroyed) {
       onIndexChange(detail.imageIdIndex)
+      notifyStateChange()
     }
   }
   const handleImageLoadError = (event: Event) => {
@@ -174,11 +222,21 @@ export async function createAxialViewportRuntime(
         core.Enums.Events.STACK_NEW_IMAGE,
         handleNewImage,
       )
+      element.removeEventListener(
+        core.Enums.Events.CAMERA_MODIFIED,
+        notifyStateChange,
+      )
+      element.removeEventListener(
+        core.Enums.Events.VOI_MODIFIED,
+        notifyStateChange,
+      )
       core.eventTarget.removeEventListener(
         core.Enums.Events.IMAGE_LOAD_ERROR,
         handleImageLoadError,
       )
     }
+    annotationController?.destroy()
+    annotationController = null
     if (toolGroupCreated) {
       tools.ToolGroupManager.destroyToolGroup(toolGroupId)
     }
@@ -234,19 +292,41 @@ export async function createAxialViewportRuntime(
       pan: tools.PanTool.toolName,
       windowLevel: tools.WindowLevelTool.toolName,
       zoom: tools.ZoomTool.toolName,
-    } satisfies Record<import('../model/axialViewer').ViewerTool, string>
+    } satisfies Record<ViewerTool, string>
 
-    function activateTool(tool: import('../model/axialViewer').ViewerTool) {
+    function activateTool(tool: AxialTool, notify = true) {
       for (const toolName of Object.values(displayToolNames)) {
         toolGroup.setToolPassive(toolName)
+      }
+      if (isViewerAnnotationTool(tool)) {
+        annotationController?.activate(tool)
+        activeTool = tool
+        if (notify) {
+          notifyStateChange()
+        }
+        return
+      }
+      if (annotationController !== null) {
+        for (const toolName of Object.values(ANNOTATION_TOOL_NAMES)) {
+          toolGroup.setToolPassive(toolName, { removeAllBindings: true })
+        }
       }
       toolGroup.setToolActive(displayToolNames[tool], {
         bindings: [{ mouseButton: tools.Enums.MouseBindings.Primary }],
       })
+      activeTool = tool
+      if (notify) {
+        notifyStateChange()
+      }
     }
-    activateTool('windowLevel')
+    activateTool('windowLevel', false)
 
     element.addEventListener(core.Enums.Events.STACK_NEW_IMAGE, handleNewImage)
+    element.addEventListener(
+      core.Enums.Events.CAMERA_MODIFIED,
+      notifyStateChange,
+    )
+    element.addEventListener(core.Enums.Events.VOI_MODIFIED, notifyStateChange)
     core.eventTarget.addEventListener(
       core.Enums.Events.IMAGE_LOAD_ERROR,
       handleImageLoadError,
@@ -256,6 +336,28 @@ export async function createAxialViewportRuntime(
     if (cancelled || signal?.aborted) {
       throw abortError()
     }
+    await Promise.allSettled(core.imageLoader.loadAndCacheImages([...imageIds]))
+    if (cancelled || signal?.aborted) {
+      throw abortError()
+    }
+    annotationController = installViewerAnnotationTools({
+      callbacks: {
+        ...annotationCallbacks,
+        onAnnotationsChange: () => {
+          annotationCallbacks.onAnnotationsChange?.()
+          notifyStateChange()
+        },
+        onCalibrationChange: (value) => {
+          calibrationAvailable = value.available
+          annotationCallbacks.onCalibrationChange(value)
+        },
+      },
+      core,
+      elements: [element],
+      imageIds,
+      toolGroup,
+      tools,
+    })
     onIndexChange(initialIndex)
     viewport.render()
 
@@ -286,16 +388,130 @@ export async function createAxialViewportRuntime(
       }
     }
 
+    function finite(value: unknown): number | null {
+      return typeof value === 'number' && Number.isFinite(value) ? value : null
+    }
+
+    function point2(value: unknown): [number, number] | null {
+      return Array.isArray(value) && value.length === 2 &&
+        value.every((item) => finite(item) !== null)
+        ? [value[0] as number, value[1] as number]
+        : null
+    }
+
+    function captureState(): {
+      state: AxialViewerState
+      annotations: PersistedViewerAnnotation[]
+    } {
+      const presentation = viewport.getViewPresentation()
+      const properties = viewport.getProperties()
+      const lower = finite(properties.voiRange?.lower)
+      const upper = finite(properties.voiRange?.upper)
+      const zoom = finite(presentation.zoom)
+      return {
+        state: {
+          image_index: viewport.getCurrentImageIdIndex(),
+          active_tool: activeTool,
+          presentation: {
+            zoom: zoom !== null && zoom > 0 ? zoom : null,
+            pan: point2(presentation.pan),
+            rotation: finite(presentation.rotation),
+            flip_horizontal: typeof presentation.flipHorizontal === 'boolean'
+              ? presentation.flipHorizontal
+              : null,
+            flip_vertical: typeof presentation.flipVertical === 'boolean'
+              ? presentation.flipVertical
+              : null,
+          },
+          voi: lower !== null && upper !== null && lower < upper
+            ? {
+                lower,
+                upper,
+                invert: properties.invert === true,
+              }
+            : null,
+        },
+        annotations: annotationController?.capture({ axial: element }) ?? [],
+      }
+    }
+
+    async function applyState(
+      state: AxialViewerState,
+      annotations: readonly PersistedViewerAnnotation[],
+    ): Promise<AnnotationRestoreResult> {
+      restoring = true
+      try {
+        const bounded = Math.max(0, Math.min(imageIds.length - 1, state.image_index))
+        try {
+          await viewport.setImageIdIndex(bounded)
+          onIndexChange(bounded)
+        } catch (error) {
+          onError(toSafeViewerError(error))
+        }
+        if (state.presentation !== null) {
+          viewport.setViewPresentation({
+            ...(state.presentation.zoom === null || state.presentation.zoom === undefined
+              ? {}
+              : { zoom: state.presentation.zoom }),
+            ...(state.presentation.pan === null || state.presentation.pan === undefined
+              ? {}
+              : { pan: [...state.presentation.pan] as [number, number] }),
+            ...(state.presentation.rotation === null || state.presentation.rotation === undefined
+              ? {}
+              : { rotation: state.presentation.rotation }),
+            ...(state.presentation.flip_horizontal === null || state.presentation.flip_horizontal === undefined
+              ? {}
+              : { flipHorizontal: state.presentation.flip_horizontal }),
+            ...(state.presentation.flip_vertical === null || state.presentation.flip_vertical === undefined
+              ? {}
+              : { flipVertical: state.presentation.flip_vertical }),
+          })
+        }
+        if (state.voi !== null) {
+          viewport.setProperties({
+            voiRange: { lower: state.voi.lower, upper: state.voi.upper },
+            invert: state.voi.invert,
+          })
+        }
+        const result = annotationController?.restore(
+          { axial: viewport },
+          annotations,
+        ) ?? { restored: 0, skipped: annotations.length }
+        const geometryTool = (
+          GEOMETRY_MEASUREMENT_TOOLS as readonly string[]
+        ).includes(state.active_tool)
+        activateTool(
+          geometryTool && !calibrationAvailable
+            ? 'windowLevel'
+            : state.active_tool,
+          false,
+        )
+        viewport.render()
+        return result
+      } finally {
+        restoring = false
+      }
+    }
+
     return {
       activateTool,
+      applyState,
+      captureState,
+      clearAnnotations: () => annotationController?.clearAnnotations(),
       destroy: cancelAndDestroy,
       next: () => setIndex(viewport.getCurrentImageIdIndex() + 1),
       previous: () => setIndex(viewport.getCurrentImageIdIndex() - 1),
       reset: async () => {
-        await setIndex(initialIndex)
-        viewport.resetProperties()
-        viewport.resetCamera()
-        viewport.render()
+        restoring = true
+        try {
+          activateTool('windowLevel', false)
+          await setIndex(initialIndex)
+          viewport.resetProperties()
+          viewport.resetCamera()
+          viewport.render()
+        } finally {
+          restoring = false
+        }
       },
       resize: () => renderingEngine.resize(),
       retry: retryCurrent,

@@ -2,7 +2,7 @@ import type { ViewerTool } from '../model/axialViewer'
 
 
 interface ViewerToolbarProps {
-  activeTool: ViewerTool
+  activeTool: string
   currentIndex: number
   disabled?: boolean
   onNext: () => void

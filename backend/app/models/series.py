@@ -14,6 +14,7 @@ from app.models.common import utc_now_for_storage
 if TYPE_CHECKING:
     from app.models.instance import Instance
     from app.models.study import Study
+    from app.models.viewer_state import ViewerState
 
 
 class Series(Base):
@@ -66,4 +67,11 @@ class Series(Base):
         back_populates="series",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    viewer_state: Mapped[ViewerState | None] = relationship(
+        back_populates="series",
+        cascade="all, delete-orphan",
+        single_parent=True,
+        passive_deletes=True,
+        uselist=False,
     )

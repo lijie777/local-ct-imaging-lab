@@ -2,6 +2,17 @@ import {
   abortPendingDicomLoads,
   initializeCornerstone,
 } from '../../axial-viewer/core/cornerstone'
+import {
+  ANNOTATION_TOOL_NAMES,
+  installViewerAnnotationTools,
+  type ViewerAnnotationController,
+} from '../../viewer-annotations/core/annotationTools'
+import {
+  GEOMETRY_MEASUREMENT_TOOLS,
+  isViewerAnnotationTool,
+  type ViewerAnnotationCallbacks,
+  type ViewerAnnotationTool,
+} from '../../viewer-annotations/model/viewerAnnotation'
 import type {
   MprTool,
   MprViewportId,
@@ -23,6 +34,13 @@ import type {
   MprRuntimeCallbacks,
   MprRuntimeElements,
 } from './mprRuntimeTypes'
+import type { AnnotationRestoreResult } from '../../viewer-state/core/annotationPersistence'
+import type {
+  MprViewerState,
+  PersistedViewerAnnotation,
+  ViewPresentationState,
+  ViewportDisplayState,
+} from '../../viewer-state/model/viewerState'
 
 export type {
   MprRuntime,
@@ -52,6 +70,12 @@ const partialLoadMessage = '部分影像加载失败，无法完整构建三视�
 const registeredTools = new Set<string>()
 let runtimeSequence = 0
 
+const NOOP_ANNOTATION_CALLBACKS: ViewerAnnotationCallbacks = {
+  onAnnotationCountChange: () => undefined,
+  onCalibrationChange: () => undefined,
+  onTextRequest: () => undefined,
+}
+
 const DEFAULT_ORIENTATIONS: Record<MprViewportId, MprViewportOrientation> = {
   axial: { top: 'A', right: 'L', bottom: 'P', left: 'R' },
   coronal: { top: 'S', right: 'L', bottom: 'I', left: 'R' },
@@ -67,6 +91,7 @@ export async function createMprRuntime(
   imageIds: readonly string[],
   callbacks: MprRuntimeCallbacks,
   signal?: AbortSignal,
+  annotationCallbacks: ViewerAnnotationCallbacks = NOOP_ANNOTATION_CALLBACKS,
 ): Promise<MprRuntime> {
   const { core, tools } = await initializeCornerstone()
   if (signal?.aborted) {
@@ -91,9 +116,13 @@ export async function createMprRuntime(
   let cancelled = false
   let loadSettled = false
   let activeTool: MprTool = 'crosshairs'
+  let activeViewport: MprViewportId = 'axial'
   let crosshairsVisible = true
+  let calibrationAvailable = false
+  let restoring = false
   let failureMessage: string | null = null
   let syncingVoi = false
+  let annotationController: ViewerAnnotationController | null = null
   const elementListeners: Array<{
     capture?: boolean
     element: HTMLDivElement
@@ -117,6 +146,8 @@ export async function createMprRuntime(
     for (const { listener, type } of runtimeEventListeners) {
       safeCall(() => core.eventTarget.removeEventListener(type, listener))
     }
+    safeCall(() => annotationController?.destroy())
+    annotationController = null
     safeCall(() => abortPendingDicomLoads(imageIds))
     safeCall(() => volume?.cancelLoading?.())
     safeCall(() => volume?.clearLoadCallbacks?.())
@@ -154,6 +185,12 @@ export async function createMprRuntime(
     }
     failureMessage = message
     callbacks.onError(message)
+  }
+
+  function notifyStateChange(): void {
+    if (!destroyed && !restoring) {
+      callbacks.onStateChange?.()
+    }
   }
 
   const handleImageFailure: EventListener = (event) => {
@@ -269,16 +306,60 @@ export async function createMprRuntime(
     for (const id of VIEWPORTS) {
       toolGroup.addViewport(viewportIds[id], renderingEngineId)
     }
+    annotationController = installViewerAnnotationTools({
+      callbacks: {
+        ...annotationCallbacks,
+        onAnnotationsChange: () => {
+          annotationCallbacks.onAnnotationsChange?.()
+          notifyStateChange()
+        },
+        onCalibrationChange: (value) => {
+          calibrationAvailable = value.available
+          annotationCallbacks.onCalibrationChange(value)
+        },
+      },
+      core,
+      elements: VIEWPORTS.map((id) => elements[id]),
+      imageIds,
+      toolGroup,
+      tools,
+    })
     const toolNameByMprTool: Record<MprTool, string> = {
+      ...ANNOTATION_TOOL_NAMES,
       crosshairs: tools.CrosshairsTool.toolName,
       pan: tools.PanTool.toolName,
       windowLevel: tools.WindowLevelTool.toolName,
       zoom: tools.ZoomTool.toolName,
     }
-    const primaryTools = Object.entries(toolNameByMprTool) as Array<[MprTool, string]>
+    const primaryTools: Array<[
+      Exclude<MprTool, ViewerAnnotationTool>,
+      string,
+    ]> = [
+      ['crosshairs', tools.CrosshairsTool.toolName],
+      ['pan', tools.PanTool.toolName],
+      ['windowLevel', tools.WindowLevelTool.toolName],
+      ['zoom', tools.ZoomTool.toolName],
+    ]
 
-    function activatePrimaryTool(tool: MprTool): void {
+    function activatePrimaryTool(tool: MprTool, notify = true): void {
       if (destroyed) {
+        return
+      }
+      const activeToolName = toolNameByMprTool[tool]
+      if (isViewerAnnotationTool(tool)) {
+        if (crosshairsVisible) {
+          toolGroup.setToolEnabled(tools.CrosshairsTool.toolName)
+        }
+        for (const [, toolName] of primaryTools) {
+          if (toolName !== tools.CrosshairsTool.toolName) {
+            toolGroup.setToolPassive(toolName, { removeAllBindings: true })
+          }
+        }
+        annotationController?.activate(tool)
+        activeTool = tool
+        if (notify) {
+          notifyStateChange()
+        }
         return
       }
       if (tool === 'crosshairs' && !crosshairsVisible) {
@@ -294,13 +375,19 @@ export async function createMprRuntime(
         }
         toolGroup.setToolPassive(toolName, { removeAllBindings: true })
       }
-      toolGroup.setToolActive(toolNameByMprTool[tool], {
+      for (const toolName of Object.values(ANNOTATION_TOOL_NAMES)) {
+        toolGroup.setToolPassive(toolName, { removeAllBindings: true })
+      }
+      toolGroup.setToolActive(activeToolName, {
         bindings: [{ mouseButton: tools.Enums.MouseBindings.Primary }],
       })
       activeTool = tool
+      if (notify) {
+        notifyStateChange()
+      }
     }
 
-    function setCrosshairsVisibility(visible: boolean): void {
+    function setCrosshairsVisibility(visible: boolean, notify = true): void {
       if (destroyed || visible === crosshairsVisible) {
         return
       }
@@ -310,19 +397,29 @@ export async function createMprRuntime(
         }
         toolGroup.setToolDisabled(tools.CrosshairsTool.toolName)
         crosshairsVisible = false
+        if (notify) {
+          notifyStateChange()
+        }
         return
       }
       toolGroup.setToolEnabled(tools.CrosshairsTool.toolName)
       crosshairsVisible = true
+      if (notify) {
+        notifyStateChange()
+      }
     }
 
     toolGroup.setToolActive(tools.StackScrollTool.toolName, {
       bindings: [{ mouseButton: tools.Enums.MouseBindings.Wheel }],
     })
-    activatePrimaryTool('crosshairs')
+    activatePrimaryTool('crosshairs', false)
     const crosshairsTool = toolGroup.getToolInstance(
       tools.CrosshairsTool.toolName,
-    ) as { resetCrosshairs?(): void } | undefined
+    ) as {
+      resetCrosshairs?(): void
+      setToolCenter?(position: [number, number, number], suppressEvents?: boolean): void
+      toolCenter?: unknown
+    } | undefined
     crosshairsTool?.resetCrosshairs?.()
 
     function emitLinkedPosition(): void {
@@ -383,11 +480,16 @@ export async function createMprRuntime(
     for (const id of VIEWPORTS) {
       const activate = () => {
         if (!destroyed) {
+          activeViewport = id
           callbacks.onActiveViewport(id)
           emitLinkedPosition()
+          notifyStateChange()
         }
       }
-      const updatePosition = () => emitLinkedPosition()
+      const updatePosition = () => {
+        emitLinkedPosition()
+        notifyStateChange()
+      }
       for (const type of ['pointerdown', 'focusin']) {
         elements[id].addEventListener(type, activate)
         elementListeners.push({ element: elements[id], listener: activate, type })
@@ -399,7 +501,10 @@ export async function createMprRuntime(
         elements[id].addEventListener(type, updatePosition)
         elementListeners.push({ element: elements[id], listener: updatePosition, type })
       }
-      const syncVoi = (event: Event) => syncVoiFrom(id, event)
+      const syncVoi = (event: Event) => {
+        syncVoiFrom(id, event)
+        notifyStateChange()
+      }
       elements[id].addEventListener(core.Enums.Events.VOI_MODIFIED, syncVoi)
       elementListeners.push({
         element: elements[id],
@@ -434,28 +539,192 @@ export async function createMprRuntime(
       if (destroyed) {
         return
       }
-      syncingVoi = true
+      restoring = true
+      try {
+        syncingVoi = true
+        try {
+          for (const id of VIEWPORTS) {
+            renderingEngine.getViewport<{ resetProperties(): void }>(
+              viewportIds[id],
+            ).resetProperties()
+          }
+        } finally {
+          syncingVoi = false
+        }
+        if (!crosshairsVisible) {
+          toolGroup.setToolEnabled(tools.CrosshairsTool.toolName)
+          crosshairsVisible = true
+        }
+        activatePrimaryTool('crosshairs', false)
+        crosshairsTool?.resetCrosshairs?.()
+        activeViewport = 'axial'
+        callbacks.onActiveViewport('axial')
+        emitLinkedPosition()
+      } finally {
+        restoring = false
+      }
+    }
+
+    function finite(value: unknown): number | null {
+      return typeof value === 'number' && Number.isFinite(value) ? value : null
+    }
+
+    function point2(value: unknown): [number, number] | null {
+      return Array.isArray(value) && value.length === 2 &&
+        value.every((item) => finite(item) !== null)
+        ? [value[0] as number, value[1] as number]
+        : null
+    }
+
+    function point3(value: unknown): [number, number, number] | null {
+      return Array.isArray(value) && value.length === 3 &&
+        value.every((item) => finite(item) !== null)
+        ? [value[0] as number, value[1] as number, value[2] as number]
+        : null
+    }
+
+    function displayState(id: MprViewportId): ViewportDisplayState {
+      const viewport = renderingEngine.getViewport<{
+        getProperties(): {
+          invert?: boolean
+          voiRange?: { lower?: unknown; upper?: unknown }
+        }
+        getViewPresentation(): {
+          flipHorizontal?: unknown
+          flipVertical?: unknown
+          pan?: unknown
+          rotation?: unknown
+          zoom?: unknown
+        }
+      }>(viewportIds[id])
+      const presentation = viewport.getViewPresentation()
+      const properties = viewport.getProperties()
+      const lower = finite(properties.voiRange?.lower)
+      const upper = finite(properties.voiRange?.upper)
+      const zoom = finite(presentation.zoom)
+      const safePresentation: ViewPresentationState = {
+        zoom: zoom !== null && zoom > 0 ? zoom : null,
+        pan: point2(presentation.pan),
+        rotation: finite(presentation.rotation),
+        flip_horizontal: typeof presentation.flipHorizontal === 'boolean'
+          ? presentation.flipHorizontal
+          : null,
+        flip_vertical: typeof presentation.flipVertical === 'boolean'
+          ? presentation.flipVertical
+          : null,
+      }
+      return {
+        presentation: safePresentation,
+        voi: lower !== null && upper !== null && lower < upper
+          ? { lower, upper, invert: properties.invert === true }
+          : null,
+      }
+    }
+
+    function captureState(): {
+      state: MprViewerState
+      annotations: PersistedViewerAnnotation[]
+    } {
+      const center = point3(crosshairsTool?.toolCenter) ?? [0, 0, 0]
+      return {
+        state: {
+          active_viewport: activeViewport,
+          active_tool: activeTool,
+          crosshairs_visible: crosshairsVisible,
+          crosshairs_position: center,
+          viewports: {
+            axial: displayState('axial'),
+            coronal: displayState('coronal'),
+            sagittal: displayState('sagittal'),
+          },
+        },
+        annotations: annotationController?.capture(elements) ?? [],
+      }
+    }
+
+    function applyPresentation(
+      id: MprViewportId,
+      state: ViewportDisplayState,
+    ): void {
+      const viewport = renderingEngine.getViewport<{
+        setProperties(properties: {
+          invert?: boolean
+          voiRange: { lower: number; upper: number }
+        }): void
+        setViewPresentation(presentation: Record<string, unknown>): void
+      }>(viewportIds[id])
+      if (state.presentation !== null) {
+        viewport.setViewPresentation({
+          ...(state.presentation.zoom === null || state.presentation.zoom === undefined
+            ? {}
+            : { zoom: state.presentation.zoom }),
+          ...(state.presentation.pan === null || state.presentation.pan === undefined
+            ? {}
+            : { pan: [...state.presentation.pan] }),
+          ...(state.presentation.rotation === null || state.presentation.rotation === undefined
+            ? {}
+            : { rotation: state.presentation.rotation }),
+          ...(state.presentation.flip_horizontal === null || state.presentation.flip_horizontal === undefined
+            ? {}
+            : { flipHorizontal: state.presentation.flip_horizontal }),
+          ...(state.presentation.flip_vertical === null || state.presentation.flip_vertical === undefined
+            ? {}
+            : { flipVertical: state.presentation.flip_vertical }),
+        })
+      }
+      if (state.voi !== null) {
+        viewport.setProperties({
+          voiRange: { lower: state.voi.lower, upper: state.voi.upper },
+          invert: state.voi.invert,
+        })
+      }
+    }
+
+    async function applyState(
+      state: MprViewerState,
+      annotations: readonly PersistedViewerAnnotation[],
+    ): Promise<AnnotationRestoreResult> {
+      restoring = true
       try {
         for (const id of VIEWPORTS) {
-          renderingEngine.getViewport<{ resetProperties(): void }>(
-            viewportIds[id],
-          ).resetProperties()
+          applyPresentation(id, state.viewports[id])
         }
+        crosshairsTool?.setToolCenter?.([...state.crosshairs_position], true)
+        setCrosshairsVisibility(state.crosshairs_visible, false)
+        const result = annotationController?.restore(
+          {
+            axial: renderingEngine.getViewport(viewportIds.axial),
+            coronal: renderingEngine.getViewport(viewportIds.coronal),
+            sagittal: renderingEngine.getViewport(viewportIds.sagittal),
+          },
+          annotations,
+        ) ?? { restored: 0, skipped: annotations.length }
+        const geometryTool = (
+          GEOMETRY_MEASUREMENT_TOOLS as readonly string[]
+        ).includes(state.active_tool)
+        const nextTool = (
+          geometryTool && !calibrationAvailable
+        ) || (state.active_tool === 'crosshairs' && !state.crosshairs_visible)
+          ? 'windowLevel'
+          : state.active_tool
+        activatePrimaryTool(nextTool, false)
+        activeViewport = state.active_viewport
+        callbacks.onActiveViewport(activeViewport)
+        for (const id of VIEWPORTS) {
+          callbacks.onPosition(id, [...state.crosshairs_position])
+        }
+        renderingEngine.render()
+        return result
       } finally {
-        syncingVoi = false
+        restoring = false
       }
-      if (!crosshairsVisible) {
-        toolGroup.setToolEnabled(tools.CrosshairsTool.toolName)
-        crosshairsVisible = true
-      }
-      activatePrimaryTool('crosshairs')
-      crosshairsTool?.resetCrosshairs?.()
-      callbacks.onActiveViewport('axial')
-      emitLinkedPosition()
     }
 
     return {
       activateTool: activatePrimaryTool,
+      applyState,
+      captureState,
+      clearAnnotations: () => annotationController?.clearAnnotations(),
       destroy: cancelAndDestroy,
       reset: resetRuntime,
       resize: () => renderingEngine.resize(),

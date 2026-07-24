@@ -55,6 +55,7 @@ export function MprViewerPage({ context, onClose }: MprViewerPageProps) {
         series.eligibility?.eligible ? (
           <MprViewportGrid
             imageIds={series.imageIds}
+            seriesId={context.series.id}
             metadata={(
               <>
                 <h2>影像摘要</h2>

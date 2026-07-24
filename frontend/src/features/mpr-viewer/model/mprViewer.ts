@@ -1,10 +1,11 @@
 import type { SeriesDetail } from '../../dicom-import/model/dicomImport'
 import { viewabilityReasonLabel } from '../../dicom-import/model/viewability'
 import type { ViewerTool } from '../../axial-viewer/model/axialViewer'
+import type { ViewerAnnotationTool } from '../../viewer-annotations/model/viewerAnnotation'
 
 
 export type MprViewportId = 'axial' | 'coronal' | 'sagittal'
-export type MprTool = 'crosshairs' | ViewerTool
+export type MprTool = 'crosshairs' | ViewerTool | ViewerAnnotationTool
 export type Point3 = readonly [number, number, number]
 
 export interface MprEligibility {

@@ -18,30 +18,39 @@ const mocks = vi.hoisted(() => {
         focalPoint: [0, 0, 0],
         viewPlaneNormal: [0, 0, 1],
       })),
+      getProperties: vi.fn(() => ({ invert: false, voiRange: { lower: -100, upper: 300 } })),
+      getViewPresentation: vi.fn(() => ({ pan: [1, 2], rotation: 0, zoom: 1.1 })),
       render: vi.fn(),
       resetCamera: vi.fn(),
       resetProperties: vi.fn(),
       setProperties: vi.fn(),
+      setViewPresentation: vi.fn(),
     },
     coronal: {
       getCamera: vi.fn(() => ({
         focalPoint: [0, 0, 0],
         viewPlaneNormal: [0, 1, 0],
       })),
+      getProperties: vi.fn(() => ({ invert: true, voiRange: { lower: -200, upper: 200 } })),
+      getViewPresentation: vi.fn(() => ({ pan: [3, 4], rotation: 5, zoom: 1.2 })),
       render: vi.fn(),
       resetCamera: vi.fn(),
       resetProperties: vi.fn(),
       setProperties: vi.fn(),
+      setViewPresentation: vi.fn(),
     },
     sagittal: {
       getCamera: vi.fn(() => ({
         focalPoint: [0, 0, 0],
         viewPlaneNormal: [1, 0, 0],
       })),
+      getProperties: vi.fn(() => ({ invert: false, voiRange: { lower: -300, upper: 100 } })),
+      getViewPresentation: vi.fn(() => ({ pan: [5, 6], rotation: 10, zoom: 1.3 })),
       render: vi.fn(),
       resetCamera: vi.fn(),
       resetProperties: vi.fn(),
       setProperties: vi.fn(),
+      setViewPresentation: vi.fn(),
     },
   }
   const renderingEngine = {
@@ -78,7 +87,11 @@ const mocks = vi.hoisted(() => {
       eventListeners.get(type)?.delete(listener)
     }),
   }
-  const crosshairsTool = { resetCrosshairs: vi.fn() }
+  const crosshairsTool = {
+    resetCrosshairs: vi.fn(),
+    setToolCenter: vi.fn(),
+    toolCenter: [4, 5, 6],
+  }
   const toolGroup = {
     addTool: vi.fn(),
     addViewport: vi.fn(),
@@ -87,6 +100,20 @@ const mocks = vi.hoisted(() => {
     setToolDisabled: vi.fn(),
     setToolEnabled: vi.fn(),
     setToolPassive: vi.fn(),
+  }
+  const annotationController = {
+    activate: vi.fn(),
+    capture: vi.fn(() => [{
+      viewport: 'coronal',
+      tool_name: 'Angle',
+      referenced_image_id: 'a',
+      points: [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+      label: null,
+      text_box: null,
+    }]),
+    clearAnnotations: vi.fn(),
+    destroy: vi.fn(),
+    restore: vi.fn(() => ({ restored: 1, skipped: 0 })),
   }
   const core = {
     Enums: {
@@ -148,6 +175,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     abortPendingDicomLoads: vi.fn(),
+    annotationController,
     core,
     crosshairsTool,
     eventListeners,
@@ -156,8 +184,20 @@ const mocks = vi.hoisted(() => {
     tools,
     volume,
     viewports,
+    installViewerAnnotationTools: vi.fn(() => annotationController),
   }
 })
+
+vi.mock('../../viewer-annotations/core/annotationTools', () => ({
+  ANNOTATION_TOOL_NAMES: {
+    angle: 'Angle',
+    arrowAnnotate: 'ArrowAnnotate',
+    eraseAnnotation: 'ScopedAnnotationEraser',
+    length: 'Length',
+    rectangleRoi: 'RectangleROI',
+  },
+  installViewerAnnotationTools: mocks.installViewerAnnotationTools,
+}))
 
 vi.mock('../../axial-viewer/core/cornerstone', () => ({
   abortPendingDicomLoads: mocks.abortPendingDicomLoads,
@@ -192,6 +232,7 @@ function createCallbacks() {
     onPosition: vi.fn(),
     onProgress: vi.fn(),
     onReady: vi.fn(),
+    onStateChange: vi.fn(),
   }
 }
 
@@ -439,6 +480,68 @@ describe('MPR volume binding and progress', () => {
 })
 
 describe('MPR tools', () => {
+  it('installs one annotation controller for all three viewports', async () => {
+    const elements = createElements()
+    const annotationCallbacks = {
+      onAnnotationCountChange: vi.fn(),
+      onCalibrationChange: vi.fn(),
+      onTextRequest: vi.fn(),
+    }
+    const { createMprRuntime } = await import('./mprCornerstone')
+
+    await createMprRuntime(
+      elements,
+      ['a', 'b'],
+      createCallbacks(),
+      undefined,
+      annotationCallbacks,
+    )
+
+    expect(mocks.installViewerAnnotationTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callbacks: expect.objectContaining({
+          onAnnotationCountChange: annotationCallbacks.onAnnotationCountChange,
+          onCalibrationChange: expect.any(Function),
+          onTextRequest: annotationCallbacks.onTextRequest,
+        }),
+        elements: [elements.axial, elements.coronal, elements.sagittal],
+        imageIds: ['a', 'b'],
+        toolGroup: mocks.toolGroup,
+      }),
+    )
+  })
+
+  it('routes annotation tools, preserves visible Crosshairs, and clears only annotations', async () => {
+    const { createMprRuntime } = await import('./mprCornerstone')
+    const runtime = await createMprRuntime(
+      createElements(),
+      ['a', 'b'],
+      createCallbacks(),
+    )
+    mocks.toolGroup.setToolActive.mockClear()
+    mocks.toolGroup.setToolEnabled.mockClear()
+    mocks.toolGroup.setToolPassive.mockClear()
+
+    runtime.activateTool('length')
+
+    expect(mocks.annotationController.activate).toHaveBeenCalledWith('length')
+    expect(mocks.toolGroup.setToolEnabled).toHaveBeenCalledWith('Crosshairs')
+    for (const toolName of ['WindowLevel', 'Pan', 'Zoom']) {
+      expect(mocks.toolGroup.setToolPassive).toHaveBeenCalledWith(toolName, {
+        removeAllBindings: true,
+      })
+    }
+    expect(mocks.toolGroup.setToolDisabled).not.toHaveBeenCalledWith('Crosshairs')
+
+    runtime.clearAnnotations()
+    runtime.reset()
+    expect(mocks.annotationController.clearAnnotations).toHaveBeenCalledOnce()
+    expect(mocks.toolGroup.setToolActive).toHaveBeenCalledWith('Crosshairs', {
+      bindings: [{ mouseButton: 1 }],
+    })
+    expect(mocks.annotationController.clearAnnotations).toHaveBeenCalledOnce()
+  })
+
   it('registers one tool group for all viewports with one Primary tool and Wheel scrolling', async () => {
     const { createMprRuntime } = await import('./mprCornerstone')
 
@@ -604,6 +707,21 @@ describe('MPR tools', () => {
       ['sagittal', [0, 0, 0]],
     ])
     expect(mocks.core.volumeLoader.createAndCacheVolume).toHaveBeenCalledOnce()
+  })
+
+  it('re-enables state capture when reset fails partway through', async () => {
+    const callbacks = createCallbacks()
+    const { createMprRuntime } = await import('./mprCornerstone')
+    const runtime = await createMprRuntime(createElements(), ['a', 'b'], callbacks)
+    callbacks.onStateChange.mockClear()
+    mocks.crosshairsTool.resetCrosshairs.mockImplementationOnce(() => {
+      throw new Error('reset failed')
+    })
+
+    expect(() => runtime.reset()).toThrow('reset failed')
+    runtime.activateTool('pan')
+
+    expect(callbacks.onStateChange).toHaveBeenCalledOnce()
   })
 
   it('centers the linked Crosshairs once after all three viewports are registered', async () => {
@@ -781,6 +899,10 @@ describe('MPR safe failures and cleanup', () => {
     expect(mocks.abortPendingDicomLoads).toHaveBeenCalledWith(['a', 'b'])
     expect(mocks.volume.cancelLoading).toHaveBeenCalledOnce()
     expect(mocks.volume.clearLoadCallbacks).toHaveBeenCalledOnce()
+    expect(mocks.annotationController.destroy).toHaveBeenCalledOnce()
+    expect(mocks.annotationController.destroy.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.toolGroup.setToolDisabled.mock.invocationCallOrder.at(-1)!,
+    )
     expect(mocks.toolGroup.setToolDisabled).toHaveBeenCalledWith('Crosshairs')
     expect(mocks.tools.ToolGroupManager.destroyToolGroup).toHaveBeenCalledOnce()
     expect(mocks.renderingEngine.destroy).toHaveBeenCalledOnce()
@@ -794,5 +916,109 @@ describe('MPR safe failures and cleanup', () => {
     }))
     expect(callbacks.onPosition).not.toHaveBeenCalled()
     expect(callbacks.onError).not.toHaveBeenCalled()
+  })
+
+  it('captures three public viewport states, Crosshairs, tool, and safe annotations', async () => {
+    const elements = createElements()
+    const callbacks = createCallbacks()
+    const { createMprRuntime } = await import('./mprCornerstone')
+    const runtime = await createMprRuntime(elements, ['a', 'b'], callbacks)
+    runtime.activateTool('pan')
+
+    expect(runtime.captureState()).toEqual({
+      state: {
+        active_viewport: 'axial',
+        active_tool: 'pan',
+        crosshairs_visible: true,
+        crosshairs_position: [4, 5, 6],
+        viewports: {
+          axial: {
+            presentation: expect.objectContaining({ zoom: 1.1, pan: [1, 2] }),
+            voi: { lower: -100, upper: 300, invert: false },
+          },
+          coronal: {
+            presentation: expect.objectContaining({ zoom: 1.2, pan: [3, 4] }),
+            voi: { lower: -200, upper: 200, invert: true },
+          },
+          sagittal: {
+            presentation: expect.objectContaining({ zoom: 1.3, pan: [5, 6] }),
+            voi: { lower: -300, upper: 100, invert: false },
+          },
+        },
+      },
+      annotations: [expect.objectContaining({ tool_name: 'Angle' })],
+    })
+    expect(mocks.annotationController.capture).toHaveBeenCalledWith(elements)
+  })
+
+  it('applies viewports, Crosshairs, annotations, and tool without save feedback', async () => {
+    const elements = createElements()
+    const callbacks = createCallbacks()
+    const { createMprRuntime } = await import('./mprCornerstone')
+    const runtime = await createMprRuntime(elements, ['a', 'b'], callbacks)
+    callbacks.onStateChange.mockClear()
+    mocks.toolGroup.setToolActive.mockClear()
+
+    const state = {
+      active_viewport: 'sagittal' as const,
+      active_tool: 'pan' as const,
+      crosshairs_visible: true,
+      crosshairs_position: [10, 20, 30] as [number, number, number],
+      viewports: {
+        axial: {
+          presentation: {
+            zoom: 2,
+            pan: [4, 5] as [number, number],
+            rotation: 1,
+            flip_horizontal: false,
+            flip_vertical: true,
+          },
+          voi: { lower: -150, upper: 250, invert: false },
+        },
+        coronal: { presentation: null, voi: null },
+        sagittal: { presentation: null, voi: null },
+      },
+    }
+    const annotations = [{
+      viewport: 'sagittal' as const,
+      tool_name: 'Length' as const,
+      referenced_image_id: 'a',
+      points: [[0, 0, 0], [1, 1, 1]] as [number, number, number][],
+      label: null,
+      text_box: null,
+    }]
+
+    await expect(runtime.applyState(state, annotations)).resolves.toEqual({
+      restored: 1,
+      skipped: 0,
+    })
+    expect(mocks.viewports.axial.setViewPresentation).toHaveBeenCalledWith({
+      zoom: 2,
+      pan: [4, 5],
+      rotation: 1,
+      flipHorizontal: false,
+      flipVertical: true,
+    })
+    expect(mocks.viewports.axial.setProperties).toHaveBeenCalledWith({
+      voiRange: { lower: -150, upper: 250 },
+      invert: false,
+    })
+    expect(mocks.crosshairsTool.setToolCenter).toHaveBeenCalledWith([10, 20, 30], true)
+    expect(mocks.annotationController.restore).toHaveBeenCalledWith(
+      expect.objectContaining({
+        axial: mocks.viewports.axial,
+        coronal: mocks.viewports.coronal,
+        sagittal: mocks.viewports.sagittal,
+      }),
+      annotations,
+    )
+    expect(mocks.toolGroup.setToolActive).toHaveBeenLastCalledWith('Pan', {
+      bindings: [{ mouseButton: 1 }],
+    })
+    expect(callbacks.onActiveViewport).toHaveBeenCalledWith('sagittal')
+    expect(callbacks.onStateChange).not.toHaveBeenCalled()
+
+    elements.axial.dispatchEvent(new Event('CAMERA_MODIFIED'))
+    expect(callbacks.onStateChange).toHaveBeenCalledOnce()
   })
 })

@@ -1,0 +1,193 @@
+.advanced-3d-viewer-page,
+.advanced-3d-runtime-shell {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.advanced-3d-viewer-heading,
+.advanced-3d-entry {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.advanced-3d-viewer-heading h1,
+.advanced-3d-viewer-heading p,
+.advanced-3d-entry p,
+.advanced-3d-load-status p,
+.advanced-3d-mode-status,
+.advanced-3d-surface-status {
+  margin: 0;
+}
+
+.advanced-3d-viewer-heading h1 {
+  color: #14213d;
+}
+
+.advanced-3d-viewer-heading > div > p:last-child {
+  margin-top: 0.5rem;
+}
+
+.advanced-3d-entry {
+  align-items: center;
+  padding: 1rem;
+  color: #24415f;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.8rem;
+}
+
+.advanced-3d-entry--unavailable {
+  background: #f7f9fb;
+}
+
+.advanced-3d-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  color: #24415f;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.65rem;
+}
+
+.advanced-3d-toolbar__group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.advanced-3d-toolbar .button[aria-pressed="true"] {
+  color: #fff;
+  background: #24415f;
+  border-color: #24415f;
+}
+
+.advanced-3d-mode-status,
+.advanced-3d-load-status,
+.advanced-3d-surface-status {
+  padding: 0.75rem 1rem;
+  color: #24415f;
+  background: #fff;
+  border: 1px solid #dce3e9;
+  border-radius: 0.65rem;
+}
+
+.advanced-3d-mode-status {
+  font-weight: 700;
+}
+
+.advanced-3d-load-status {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.advanced-3d-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18rem;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.advanced-3d-canvas-container {
+  position: relative;
+  min-width: 0;
+  min-height: 36rem;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid #394555;
+  border-radius: 0.8rem;
+  box-shadow: 0 0.5rem 1.5rem rgb(10 18 28 / 20%);
+}
+
+.advanced-3d-viewport {
+  position: relative;
+  width: 100%;
+  height: 36rem;
+  background: #000;
+}
+
+.advanced-3d-viewport:focus-visible {
+  outline: 3px solid #f2c75c;
+  outline-offset: -4px;
+}
+
+.advanced-3d-metadata-panel {
+  min-width: 0;
+  padding: 1rem;
+  color: #dfe9f3;
+  background: #17212d;
+  border: 1px solid #394555;
+  border-radius: 0.8rem;
+}
+
+.advanced-3d-metadata-panel h2,
+.advanced-3d-metadata-panel p {
+  margin: 0;
+}
+
+.advanced-3d-metadata-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.85rem 0 0;
+}
+
+.advanced-3d-metadata-list > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.advanced-3d-metadata-list dt {
+  color: #9fb2c5;
+}
+
+.advanced-3d-metadata-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.advanced-3d-viewer-page > .viewer-message,
+.advanced-3d-runtime-shell > .viewer-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .advanced-3d-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .advanced-3d-canvas-container {
+    min-height: 28rem;
+  }
+
+  .advanced-3d-viewport {
+    height: 28rem;
+  }
+
+  .advanced-3d-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 48rem) {
+  .advanced-3d-viewer-heading,
+  .advanced-3d-entry,
+  .advanced-3d-load-status {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .advanced-3d-viewer-page > .viewer-message .button,
+  .advanced-3d-runtime-shell > .viewer-message .button {
+    width: 100%;
+  }
+}

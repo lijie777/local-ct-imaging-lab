@@ -50,6 +50,35 @@ def test_delete_maps_unknown_and_invalid_ids(client: TestClient) -> None:
     assert invalid.json()["error"]["field_errors"][0]["field"] == "id"
 
 
+def test_delete_is_blocked_by_active_import_until_job_is_discarded(
+    client: TestClient,
+) -> None:
+    patient = _create(client, "active-import")
+    created = client.post(
+        f"/api/patients/{patient['id']}/import-jobs",
+        json={
+            "files": [
+                {
+                    "relative_path": "image.dcm",
+                    "size_bytes": 4,
+                    "last_modified_ms": 1,
+                    "resume_fingerprint": "0" * 64,
+                }
+            ]
+        },
+    )
+    assert created.status_code == 201
+
+    blocked = client.delete(f"/api/patients/{patient['id']}")
+
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "import_in_progress"
+    assert client.get(f"/api/patients/{patient['id']}").status_code == 200
+
+    assert client.delete(f"/api/import-jobs/{created.json()['id']}").status_code == 204
+    assert client.delete(f"/api/patients/{patient['id']}").status_code == 204
+
+
 def test_delete_failure_rolls_back_and_keeps_patient(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
