@@ -73,9 +73,11 @@
 ```powershell
 cd backend
 uv sync --locked --group dev
-uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+后端启动时会先自动把当前 SQLite 数据库升级到 Alembic head，再执行残留清理并启动后台导入 worker；
+不需要单独运行迁移命令。需要检查迁移状态时仍可在 `backend/` 执行 `uv run alembic current`。
 
 ### 2. 启动前端
 
@@ -100,7 +102,6 @@ npm run build
 
 cd ../backend
 uv sync --locked --group dev
-uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -119,7 +120,7 @@ data/
 └── .delete-staging/            # 病人删除过程的内部隔离目录
 ```
 
-如需使用独立的本机数据目录，请在执行 Alembic 和启动后端之前，在同一个后端终端设置：
+如需使用独立的本机数据目录，请在启动后端之前，在同一个后端终端设置：
 
 ```powershell
 $env:MEDICAL_CT_APP_DATA_DIR = Join-Path $env:TEMP 'local-ct-imaging-lab-data'

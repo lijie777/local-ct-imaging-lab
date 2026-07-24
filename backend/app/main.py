@@ -16,6 +16,7 @@ from starlette.staticfiles import StaticFiles
 from app.api import api_router
 from app.core.errors import register_error_handlers
 from app.core.config import PROJECT_ROOT, load_settings
+from app.db.migrations import upgrade_database_schema
 from app.db.session import SessionLocal
 from app.services.managed_storage import ManagedStorage
 from app.services.import_job_storage import ImportJobStorage
@@ -29,9 +30,12 @@ mimetypes.add_type("text/javascript", ".js")
 
 def _application_lifespan(
     storage: ManagedStorage,
+    migration_database_url: str | None,
 ) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        if migration_database_url is not None:
+            upgrade_database_schema(migration_database_url)
         failed = storage.cleanup_pending_patient_deletes()
         if failed > 0:
             logger.warning(
@@ -569,8 +573,14 @@ def create_app(
     session_factory: sessionmaker[Session] | None = None,
     managed_storage: ManagedStorage | None = None,
     frontend_dist_override: Path | None = None,
+    auto_migrate: bool | None = None,
 ) -> FastAPI:
     configured_storage = managed_storage or ManagedStorage(load_settings())
+    should_auto_migrate = (
+        session_factory is None and managed_storage is None
+        if auto_migrate is None
+        else auto_migrate
+    )
     application = FastAPI(
         title="Local CT Imaging Lab API",
         version="0.3.0",
@@ -578,7 +588,14 @@ def create_app(
             "Local-only API for Local CT Imaging Lab, an educational medical CT application. "
             "Not for clinical diagnosis."
         ),
-        lifespan=_application_lifespan(configured_storage),
+        lifespan=_application_lifespan(
+            configured_storage,
+            (
+                configured_storage.settings.database_url
+                if should_auto_migrate
+                else None
+            ),
+        ),
     )
     application.state.session_factory = session_factory or SessionLocal
     application.state.managed_storage = configured_storage

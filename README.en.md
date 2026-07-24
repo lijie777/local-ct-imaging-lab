@@ -73,9 +73,10 @@ Open PowerShell at the repository root. The backend and frontend require separat
 ```powershell
 cd backend
 uv sync --locked --group dev
-uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+Backend startup first upgrades the current SQLite database to the Alembic head, then runs residual cleanup and starts the background import worker. A separate migration command is not required. To inspect the current revision, run `uv run alembic current` from `backend/`.
 
 ### 2. Start the frontend
 
@@ -100,7 +101,6 @@ npm run build
 
 cd ../backend
 uv sync --locked --group dev
-uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -119,7 +119,7 @@ data/
 └── .delete-staging/            # Internal isolation directory used during patient deletion
 ```
 
-To use a separate local data directory, set the variable in the same backend terminal before running Alembic and starting the backend:
+To use a separate local data directory, set the variable in the same backend terminal before starting the backend:
 
 ```powershell
 $env:MEDICAL_CT_APP_DATA_DIR = Join-Path $env:TEMP 'local-ct-imaging-lab-data'
