@@ -15,7 +15,8 @@ function fakeRuntime() {
   return {
     destroy: vi.fn(),
     getMipThicknessRange: vi.fn().mockReturnValue([0.7, 180]),
-    getSurfaceRange: vi.fn().mockReturnValue([-1000, 2000]),
+    getSurfaceRange: vi.fn<() => readonly [number, number] | null>()
+      .mockReturnValue([-1000, 2000]),
     resize: vi.fn(),
     reset: vi.fn(),
     setDirection: vi.fn(),
@@ -201,6 +202,23 @@ it('uses the actual surface range and midpoint when 300 HU is unavailable', asyn
   expect(screen.getByText('最小 500 HU')).toBeVisible()
   expect(screen.getByText('最大 900 HU')).toBeVisible()
   expect(runtime.setSurfaceThreshold).not.toHaveBeenCalled()
+})
+
+it('keeps volume and MIP available when surface has no finite HU range', async () => {
+  const runtime = fakeRuntime()
+  runtime.getSurfaceRange.mockReturnValue(null)
+  vi.mocked(createAdvanced3dRuntime).mockResolvedValue(runtime)
+
+  render(<Advanced3dViewport imageIds={['a', 'b']} />)
+  await waitFor(() => expect(createAdvanced3dRuntime).toHaveBeenCalledOnce())
+  act(() => runtimeCallbacks().onReady())
+
+  expect(screen.getByRole('button', { name: '体绘制' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'MIP' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '表面重建' })).toBeDisabled()
+  expect(screen.getByText(
+    '当前 CT 无法提供有效 HU 范围，表面重建不可用',
+  )).toBeVisible()
 })
 
 it('yields one animation frame, disables conflicts while building, and reports a ready surface with stride', async () => {
@@ -507,6 +525,23 @@ it('keeps approved runtime errors, hides unknown details, and retries with clean
   expect(screen.getByRole('alert')).toHaveTextContent(
     '本机 DICOM 文件缺失，请恢复文件后重试',
   )
+})
+
+it('does not offer retry when the browser cannot provide 3D graphics', async () => {
+  const runtime = fakeRuntime()
+  vi.mocked(createAdvanced3dRuntime).mockResolvedValue(runtime)
+
+  render(<Advanced3dViewport imageIds={['a', 'b']} />)
+  await waitFor(() => expect(createAdvanced3dRuntime).toHaveBeenCalledOnce())
+  act(() => runtimeCallbacks().onError(
+    '当前浏览器无法使用高级 3D，请使用支持三维图形的现代浏览器',
+  ))
+
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    '当前浏览器无法使用高级 3D，请使用支持三维图形的现代浏览器',
+  )
+  expect(screen.queryByRole('button', { name: '重试高级 3D' }))
+    .not.toBeInTheDocument()
 })
 
 it('delegates product retry to the parent and cleans up when validation unmounts it', async () => {

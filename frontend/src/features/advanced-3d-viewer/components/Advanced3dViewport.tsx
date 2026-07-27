@@ -25,13 +25,14 @@ interface Advanced3dViewportProps {
 
 const genericRuntimeError = '无法构建高级 3D，请重试或返回轴位查看器'
 const surfaceRuntimeError = '无法重建表面，请调整阈值或切换其他模式'
+const unsupportedGraphicsMessage = '当前浏览器无法使用高级 3D，请使用支持三维图形的现代浏览器'
 const approvedRuntimeErrors = new Set([
   genericRuntimeError,
   '本机 DICOM 文件缺失，请恢复文件后重试',
   '无法连接本机服务，请确认服务已启动',
   '本机影像服务异常，请重试或返回轴位查看器',
   '本机影像数据暂时不可用，请重试或返回轴位查看器',
-  '当前浏览器无法使用高级 3D，请使用支持三维图形的现代浏览器',
+  unsupportedGraphicsMessage,
 ])
 
 const MODE_LABELS: Record<Advanced3dMode, string> = {
@@ -84,7 +85,7 @@ export function Advanced3dViewport({
     readonly [number, number]
   >([0, 0])
   const [mipThickness, setMipThickness] = useState(0)
-  const [surfaceRange, setSurfaceRange] = useState<readonly [number, number]>([0, 0])
+  const [surfaceRange, setSurfaceRange] = useState<readonly [number, number] | null>(null)
   const [surfaceThreshold, setSurfaceThreshold] = useState(0)
   const [surfaceStride, setSurfaceStride] = useState(1)
   const [surfaceStatus, setSurfaceStatus] = useState<SurfaceStatus>({ kind: 'idle' })
@@ -115,7 +116,7 @@ export function Advanced3dViewport({
     setDirection(DEFAULT_ADVANCED_3D_STATE.direction)
     setMipThicknessRange([0, 0])
     setMipThickness(0)
-    setSurfaceRange([0, 0])
+    setSurfaceRange(null)
     setSurfaceThreshold(0)
     setSurfaceStride(1)
     setSurfaceStatus({ kind: 'idle' })
@@ -133,7 +134,9 @@ export function Advanced3dViewport({
       setMipThickness(mipRange[1])
       const nextSurfaceRange = runtime.getSurfaceRange()
       setSurfaceRange(nextSurfaceRange)
-      setSurfaceThreshold(defaultSurfaceThreshold(nextSurfaceRange))
+      setSurfaceThreshold(nextSurfaceRange === null
+        ? 0
+        : defaultSurfaceThreshold(nextSurfaceRange))
     }
 
     void createAdvanced3dRuntime(
@@ -291,12 +294,15 @@ export function Advanced3dViewport({
   }
 
   function changeSurfaceThreshold(value: number): void {
+    if (surfaceRange === null) {
+      return
+    }
     setSurfaceThreshold(clampSurfaceThreshold(value, surfaceRange))
   }
 
   async function applySurfaceThreshold(): Promise<void> {
     const runtime = runtimeRef.current
-    if (runtime === null) {
+    if (runtime === null || surfaceRange === null) {
       return
     }
     const runtimeToken = runtimeTokenRef.current
@@ -352,7 +358,9 @@ export function Advanced3dViewport({
       setPreset(DEFAULT_ADVANCED_3D_STATE.preset)
       setDirection(DEFAULT_ADVANCED_3D_STATE.direction)
       setMipThickness(mipThicknessRange[1])
-      setSurfaceThreshold(defaultSurfaceThreshold(surfaceRange))
+      setSurfaceThreshold(surfaceRange === null
+        ? 0
+        : defaultSurfaceThreshold(surfaceRange))
       setSurfaceStride(1)
       setSurfaceStatus({ kind: 'idle' })
     } catch (runtimeError) {
@@ -415,19 +423,21 @@ export function Advanced3dViewport({
       {error !== null ? (
         <div className="viewer-message viewer-message--error" role="alert">
           <p>{error}</p>
-          <button
-            className="button button--secondary"
-            onClick={() => {
-              if (onRetry === undefined) {
-                setAttempt((current) => current + 1)
-                return
-              }
-              void onRetry()
-            }}
-            type="button"
-          >
-            重试高级 3D
-          </button>
+          {error === unsupportedGraphicsMessage ? null : (
+            <button
+              className="button button--secondary"
+              onClick={() => {
+                if (onRetry === undefined) {
+                  setAttempt((current) => current + 1)
+                  return
+                }
+                void onRetry()
+              }}
+              type="button"
+            >
+              重试高级 3D
+            </button>
+          )}
         </div>
       ) : null}
 

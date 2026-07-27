@@ -15,7 +15,7 @@ interface RenderToolbarOptions {
   mipThickness?: number
   mipThicknessRange?: readonly [number, number]
   mode?: Advanced3dMode
-  surfaceRange?: readonly [number, number]
+  surfaceRange?: readonly [number, number] | null
   surfaceStride?: number
   surfaceThreshold?: number
 }
@@ -78,6 +78,23 @@ it('always shows the three modes and marks the current mode as pressed', async (
   await user.click(screen.getByRole('button', { name: '表面重建' }))
   expect(handlers.onModeChange).toHaveBeenNthCalledWith(1, 'mip')
   expect(handlers.onModeChange).toHaveBeenNthCalledWith(2, 'surface')
+})
+
+it('disables only surface mode when the volume has no finite HU range', async () => {
+  const handlers = renderToolbar({ surfaceRange: null })
+  const user = userEvent.setup()
+
+  expect(screen.getByRole('button', { name: '体绘制' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'MIP' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '表面重建' })).toBeDisabled()
+  expect(screen.getByText(
+    '当前 CT 无法提供有效 HU 范围，表面重建不可用',
+  )).toBeVisible()
+
+  await user.click(screen.getByRole('button', { name: '表面重建' }))
+  await user.click(screen.getByRole('button', { name: 'MIP' }))
+  expect(handlers.onModeChange).toHaveBeenCalledOnce()
+  expect(handlers.onModeChange).toHaveBeenCalledWith('mip')
 })
 
 it('shows only six directions and physical thickness controls in MIP mode', async () => {

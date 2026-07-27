@@ -93,6 +93,7 @@ const mocks = vi.hoisted(() => {
       removeVolumeLoadObject: vi.fn(),
     },
     eventTarget,
+    getShouldUseCPURendering: vi.fn(() => false),
     imageLoader: { loadImage: vi.fn(async () => ({})) },
     setVolumesForViewports: vi.fn(async () => undefined),
     volumeLoader: {
@@ -202,6 +203,8 @@ beforeEach(() => {
   ) => mocks.volume)
   mocks.core.cache.getVolumeLoadObject.mockReturnValue({ promise: Promise.resolve() })
   mocks.core.cache.removeVolumeLoadObject.mockImplementation(() => undefined)
+  mocks.core.getShouldUseCPURendering.mockReturnValue(false)
+  mocks.volume.voxelManager.getRange.mockReturnValue([-1024, 3071])
   mocks.initializeCornerstone.mockImplementation(async () => ({
     core: mocks.core,
     loader: {},
@@ -492,6 +495,25 @@ describe('advanced 3D Cornerstone runtime', () => {
     expect(mocks.prepareSurfaceInput).toHaveBeenCalledWith(
       expect.objectContaining({ scalarData: mocks.scalarData }),
     )
+  })
+
+  it('reports surface as unavailable when the volume has no finite HU range', async () => {
+    mocks.volume.voxelManager.getRange.mockReturnValue([
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ])
+    const { createAdvanced3dRuntime } = await import('./advanced3dCornerstone')
+    const runtime = await createAdvanced3dRuntime(
+      { viewport: createElement() },
+      ['a', 'b'],
+      createCallbacks(),
+    )
+
+    expect(runtime.getSurfaceRange()).toBeNull()
+    await expect(runtime.setSurfaceThreshold(300)).rejects.toThrow(
+      '无法重建表面，请调整阈值或切换其他模式',
+    )
+    expect(mocks.prepareSurfaceInput).not.toHaveBeenCalled()
   })
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
@@ -791,6 +813,32 @@ describe('advanced 3D Cornerstone runtime', () => {
     )
   })
 
+  it('releases all runtime resources immediately after an owned image failure', async () => {
+    const callbacks = createCallbacks()
+    const { createAdvanced3dRuntime } = await import('./advanced3dCornerstone')
+    await createAdvanced3dRuntime(
+      { viewport: createElement() },
+      ['a', 'b'],
+      callbacks,
+    )
+    const volumeId = mocks.core.volumeLoader.createAndCacheVolume.mock.calls[0][0]
+
+    mocks.core.eventTarget.dispatchEvent(new CustomEvent('IMAGE_LOAD_FAILED', {
+      detail: { error: { status: 410 }, imageId: 'b' },
+    }))
+
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      '本机 DICOM 文件缺失，请恢复文件后重试',
+    )
+    expect(mocks.abortPendingDicomLoads).toHaveBeenCalledWith(['a', 'b'])
+    expect(mocks.volume.cancelLoading).toHaveBeenCalledOnce()
+    expect(mocks.volume.clearLoadCallbacks).toHaveBeenCalledOnce()
+    expect(mocks.tools.ToolGroupManager.destroyToolGroup).toHaveBeenCalledOnce()
+    expect(mocks.renderingEngine.destroy).toHaveBeenCalledOnce()
+    expect(mocks.core.cache.removeVolumeLoadObject).toHaveBeenCalledWith(volumeId)
+    expect(mocks.core.eventTarget.removeEventListener).toHaveBeenCalledTimes(3)
+  })
+
   it('filters volume errors by the owned id', async () => {
     const callbacks = createCallbacks()
     const { createAdvanced3dRuntime } = await import('./advanced3dCornerstone')
@@ -827,6 +875,25 @@ describe('advanced 3D Cornerstone runtime', () => {
       '无法构建高级 3D，请重试或返回轴位查看器',
     )
     expect(mocks.core.RenderingEngine).not.toHaveBeenCalled()
+  })
+
+  it('rejects CPU fallback as unsupported graphics before creating a 3D engine', async () => {
+    mocks.core.getShouldUseCPURendering.mockReturnValue(true)
+    const callbacks = createCallbacks()
+    const { createAdvanced3dRuntime } = await import('./advanced3dCornerstone')
+
+    await expect(createAdvanced3dRuntime(
+      { viewport: createElement() },
+      ['a'],
+      callbacks,
+    )).rejects.toThrow(
+      '当前浏览器无法使用高级 3D，请使用支持三维图形的现代浏览器',
+    )
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      '当前浏览器无法使用高级 3D，请使用支持三维图形的现代浏览器',
+    )
+    expect(mocks.core.RenderingEngine).not.toHaveBeenCalled()
+    expect(mocks.core.imageLoader.loadImage).not.toHaveBeenCalled()
   })
 
   it('maps RenderingEngine constructor failures to the generic safe error', async () => {

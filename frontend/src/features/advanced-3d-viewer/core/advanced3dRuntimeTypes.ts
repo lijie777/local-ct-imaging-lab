@@ -27,7 +27,7 @@ export type SurfaceResult =
 export interface Advanced3dRuntime {
   destroy(): void
   getMipThicknessRange(): readonly [number, number]
-  getSurfaceRange(): readonly [number, number]
+  getSurfaceRange(): readonly [number, number] | null
   reset(): void
   resize(): void
   setDirection(direction: StandardViewDirection): void

@@ -19,7 +19,7 @@ interface Advanced3dToolbarProps {
   onReset: () => void
   onSurfaceThresholdChange: (thresholdHu: number) => void
   preset: VolumePreset
-  surfaceRange: readonly [number, number]
+  surfaceRange: readonly [number, number] | null
   surfaceStride: number
   surfaceThreshold: number
 }
@@ -97,7 +97,7 @@ export function Advanced3dToolbar({
           <button
             aria-pressed={mode === id}
             className="button button--secondary"
-            disabled={busy}
+            disabled={busy || (id === 'surface' && surfaceRange === null)}
             key={id}
             onClick={() => onModeChange(id)}
             type="button"
@@ -106,6 +106,10 @@ export function Advanced3dToolbar({
           </button>
         ))}
       </div>
+
+      {!busy && surfaceRange === null ? (
+        <p role="status">当前 CT 无法提供有效 HU 范围，表面重建不可用</p>
+      ) : null}
 
       {mode === 'volume' ? (
         <div
@@ -200,7 +204,7 @@ export function Advanced3dToolbar({
         </>
       ) : null}
 
-      {mode === 'surface' ? (
+      {mode === 'surface' && surfaceRange !== null ? (
         <div className="advanced-3d-toolbar__group">
           <span>表面阈值</span>
           <input

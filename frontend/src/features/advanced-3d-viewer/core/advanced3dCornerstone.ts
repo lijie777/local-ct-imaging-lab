@@ -93,6 +93,7 @@ const runtimeErrorMessage = '无法构建高级 3D，请重试或返回轴位查
 const missingFileMessage = '本机 DICOM 文件缺失，请恢复文件后重试'
 const serviceUnavailableMessage = '无法连接本机服务，请确认服务已启动'
 const surfaceErrorMessage = '无法重建表面，请调整阈值或切换其他模式'
+const unsupportedGraphicsMessage = '当前浏览器无法使用高级 3D，请使用支持三维图形的现代浏览器'
 const registeredTools = new Set<string>()
 let runtimeSequence = 0
 
@@ -176,6 +177,10 @@ export async function createAdvanced3dRuntime(
   }
 
   const { core, tools } = modules
+  if (core.getShouldUseCPURendering()) {
+    callbacks.onError(unsupportedGraphicsMessage)
+    throw new Error(unsupportedGraphicsMessage)
+  }
   runtimeSequence += 1
   const suffix = `${runtimeSequence}`
   const renderingEngineId = `${RENDERING_ENGINE_PREFIX}${suffix}`
@@ -300,6 +305,7 @@ export async function createAdvanced3dRuntime(
       return
     }
     failureMessage = message
+    destroyRuntime()
     callbacks.onError(message)
   }
 
@@ -488,9 +494,9 @@ export async function createAdvanced3dRuntime(
     })
     activeRenderingEngine.render()
 
-    function getSurfaceRange(): readonly [number, number] {
+    function getSurfaceRange(): readonly [number, number] | null {
       const range = volume?.voxelManager?.getRange?.()
-      return validRange(range) ? [range[0], range[1]] : [0, 0]
+      return validRange(range) ? [range[0], range[1]] : null
     }
 
     return {
@@ -571,6 +577,9 @@ export async function createAdvanced3dRuntime(
           throw new Error(surfaceErrorMessage)
         }
         const range = getSurfaceRange()
+        if (range === null) {
+          throw new Error(surfaceErrorMessage)
+        }
         try {
           const thresholdHu = clampSurfaceThreshold(threshold, range)
           const prepared = prepareSurfaceInput({
