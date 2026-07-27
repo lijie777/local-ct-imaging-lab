@@ -189,18 +189,23 @@ npm run build
 - [Viewer-state persistence design](docs/superpowers/specs/2026-07-23-viewer-state-persistence-design.md)
 - [Advanced 3D visualization design](docs/superpowers/specs/2026-07-23-advanced-3d-visualization-design.md)
 
-## Current Limitations and Explicit Exclusions
+## Unimplemented Features and Future Plans
 
-The current version does not provide:
+The following features are not implemented yet. They are planned for phased future development as independently specified, implemented, tested, and accepted Features. An item will move to “Completed Features” only after its corresponding Feature is complete:
 
-- PACS, Orthanc, DICOMweb, HIS, RIS, or integration with other external medical systems.
-- Login, accounts, authentication, roles, permissions, or multi-user concurrency.
-- Cloud services, remote access, external backup, cross-device synchronization, or telemetry.
-- Segmentation, automated lesion detection, diagnostic reports, or diagnostic recommendations.
-- Surgical planning, 3D measurements, mesh export, surface editing, or cross-Series registration.
-- Clinical diagnosis, treatment decisions, medical-device registration, regulatory certification, or any other clinical use.
-- Bookmarks, recently viewed lists, deep links, screenshots, reports, or cross-device viewer-state synchronization.
-- Cross-device import, remote directory scanning, parallel workers, or cross-device resumable uploads.
+- PACS, Orthanc, DICOMweb, HIS, RIS, and other external medical-system integrations.
+- Login, accounts, authentication, roles, permissions, and multi-user concurrency.
+- External backup, controlled remote access, cross-device synchronization, and optional telemetry management.
+- Image segmentation, educational or research-only automated detection assistance, and non-diagnostic report export.
+- Surgical planning, 3D measurements, mesh export, surface editing, and cross-Series registration.
+- Bookmarks, recently viewed lists, deep links, screenshots, and cross-device viewer-state synchronization.
+- Cross-device import, remote directory scanning, parallel workers, and cross-device resumable uploads.
+
+These items describe future development directions; they are not available in the current version and do not commit to a particular release or delivery date. Development order and acceptance criteria will be confirmed separately in each Feature's `spec.md` and `tasks.md`.
+
+## Long-Term Product Boundary
+
+This project remains a local, non-clinical educational demonstration. It does not provide clinical diagnosis, diagnostic recommendations, treatment decisions, medical-device registration, regulatory certification, or any other clinical use. Future segmentation, detection, reporting, and planning capabilities must remain non-diagnostic and non-therapeutic.
 
 ## Known Non-Blocking Warnings
 
