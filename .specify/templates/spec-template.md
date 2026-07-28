@@ -8,19 +8,6 @@
 
 **Input**: User description: "$ARGUMENTS"
 
-## Constitutional Constraints *(mandatory)*
-
-- **Safety notice**: Identify every affected major page and require a persistent, visible
-  “educational demonstration; not for clinical diagnosis” notice.
-- **Data boundary**: State how the feature remains local-only, offline, and single-user, and
-  confirm that patient and DICOM data do not leave the machine.
-- **Scope boundary**: Confirm the feature does not add cloud services, authentication, PACS,
-  DICOMweb, or diagnostic reports. Treat image measurements, viewer-state persistence,
-  background import, and advanced 3D capabilities as separate features with their own scope and
-  acceptance evidence.
-- **DICOM lifecycle, if applicable**: Define separate success, duplicate, skipped, unsupported,
-  and failed outcomes plus database/managed-file consistency on failure and deletion.
-
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
@@ -81,11 +68,6 @@
 
 [Add more user stories as needed, each with an assigned priority]
 
-### End-to-End Acceptance Path *(mandatory)*
-
-[Describe the complete user-visible path that proves this feature works from entry point through
-persistence/recovery where applicable. Include expected results at each transition.]
-
 ### Edge Cases
 
 <!--
@@ -110,11 +92,6 @@ persistence/recovery where applicable. Include expected results at each transiti
 - **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
 - **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
 - **FR-005**: System MUST [behavior, e.g., "log all security events"]
-
-### Non-Goals *(mandatory)*
-
-- [List capabilities explicitly excluded from this feature. Preserve all constitution-level
-  first-release exclusions.]
 
 *Example of marking unclear requirements:*
 
@@ -148,7 +125,7 @@ persistence/recovery where applicable. Include expected results at each transiti
   chosen when the feature description did not specify certain details.
 -->
 
-- [Assumption about target users, e.g., "One local user operates the application offline"]
+- [Assumption about target users, e.g., "Users have stable internet connectivity"]
 - [Assumption about scope boundaries, e.g., "Mobile support is out of scope for v1"]
-- [Assumption about data/environment, e.g., "Patient and DICOM data remain on this machine"]
-- [Dependency on existing local component, or state that no external service is required]
+- [Assumption about data/environment, e.g., "Existing authentication system will be reused"]
+- [Dependency on existing system/service, e.g., "Requires access to the existing user profile API"]

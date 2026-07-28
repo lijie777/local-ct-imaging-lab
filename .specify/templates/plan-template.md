@@ -40,23 +40,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Safety boundary**: Every affected major page visibly states that the software is an
-  educational demonstration and is not for clinical diagnosis.
-- **Local data boundary**: The feature remains offline, local-only, and single-user; no patient
-  or DICOM data leaves the machine.
-- **Scope and stack**: The feature uses the approved stack, does not introduce cloud services,
-  authentication, PACS, DICOMweb, or diagnostic reports, and keeps measurements, persistence,
-  background import, and advanced 3D capabilities in separately specified and accepted features.
-- **Modularity and minimal change**: Responsibilities are independently testable, dependencies
-  are minimally necessary, and unrelated refactoring is excluded.
-- **Verification**: Backend business rules have pytest coverage, frontend behavior has Vitest or
-  React Testing Library coverage, and the feature has a complete end-to-end acceptance path.
-- **DICOM consistency when applicable**: Import plans separately report success, duplicate,
-  skipped, unsupported, and failed files and preserve database/file consistency after failures
-  and deletions.
-
-Any failed gate MUST be resolved before implementation. A Constitution MUST rule cannot be waived
-through Complexity Tracking.
+[Gates determined based on constitution file]
 
 ## Project Structure
 
